@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: maja-automotores
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DB_PATH
+        value: /data/database.sqlite
+    disk:
+      name: maja-db
+      mountPath: /data
+      sizeGB: 1
