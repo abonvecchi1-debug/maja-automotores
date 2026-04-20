@@ -29,6 +29,7 @@ interface Campaign {
   seguro: string;
   identificacion_sistema: string[];
   notas: string;
+  explicacion: string;
   created_at: string;
 }
 
@@ -83,10 +84,16 @@ function CampaignCard({ c, onDelete }: { c: Campaign; onDelete: (id: string) => 
           {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
         </div>
       </div>
-      {open && c.planes.length > 0 && (
-        <div className="px-4 pb-4">
-          <PlanTable planes={c.planes} />
-          {c.notas && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-3">{c.notas}</p>}
+      {open && (
+        <div className="px-4 pb-4 space-y-4">
+          {c.planes.length > 0 && <PlanTable planes={c.planes} />}
+          {c.explicacion && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-2">Explicación</p>
+              <p className="text-sm text-blue-900 leading-relaxed whitespace-pre-line">{c.explicacion}</p>
+            </div>
+          )}
+          {c.notas && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">{c.notas}</p>}
         </div>
       )}
     </div>

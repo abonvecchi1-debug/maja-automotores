@@ -255,9 +255,15 @@ db.exec(`
     seguro TEXT NOT NULL DEFAULT '',
     identificacion_sistema TEXT NOT NULL DEFAULT '[]',
     notas TEXT NOT NULL DEFAULT '',
+    explicacion TEXT NOT NULL DEFAULT '',
     raw_result TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL
   );
+
+
 `);
+
+// Migrations for existing DBs
+try { db.exec(`ALTER TABLE credit_campaigns ADD COLUMN explicacion TEXT NOT NULL DEFAULT ''`); } catch {}
 
 export default db;

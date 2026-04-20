@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto';
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-const PROMPT = `Analizá esta hoja de créditos/campañas de financiamiento automotor y devolvé la información estructurada en JSON con este formato exacto:
+const PROMPT = `Sos un experto en financiamiento automotor argentino. Analizá esta hoja de campaña de créditos y devolvé un JSON con este formato exacto:
 {
   "titulo": "nombre de la campaña",
   "emisor": "empresa/banco",
@@ -28,7 +28,8 @@ const PROMPT = `Analizá esta hoja de créditos/campañas de financiamiento auto
   "condiciones_generales": ["condición 1", "condición 2"],
   "seguro": "tipo de seguro si aplica",
   "identificacion_sistema": ["código 1", "código 2"],
-  "notas": "cualquier aclaración importante"
+  "notas": "aclaraciones importantes del documento",
+  "explicacion": "Explicación completa en lenguaje simple para alguien que no conoce el sistema financiero. Explicá: qué es esta campaña y para qué sirve, qué significa TNA (Tasa Nominal Anual) y cómo impacta, qué es el quebranto y por qué existe, qué significa 'cuota por cada $1.000 financiados' con un ejemplo concreto (ej: si financiás $10.000.000 y la cuota es $83.33, pagás $83.33 x 10.000 = $833.300 por mes), qué es el máximo capital financiado, cómo se comparan los planes entre sí (cuál conviene según el caso), y cualquier condición importante a tener en cuenta. Usá ejemplos con números reales de la campaña. Escribí en párrafos, no en listas."
 }
 Devolvé SOLO el JSON, sin texto extra ni markdown ni bloques de código.`;
 
@@ -47,7 +48,7 @@ router.post('/analyze', authenticateToken, upload.single('file'), async (req, re
         { type: 'image_url', image_url: { url: dataUrl } },
         { type: 'text', text: PROMPT },
       ]}],
-      max_tokens: 2048,
+      max_tokens: 4096,
     });
 
     const text = completion.choices[0].message.content.trim();
@@ -63,8 +64,8 @@ router.post('/analyze', authenticateToken, upload.single('file'), async (req, re
     // Auto-save to DB
     const id = randomUUID();
     const now = new Date().toISOString();
-    db.prepare(`INSERT INTO credit_campaigns (id, titulo, emisor, modelo, vigencia_desde, vigencia_hasta, planes, condiciones_generales, seguro, identificacion_sistema, notas, raw_result, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    db.prepare(`INSERT INTO credit_campaigns (id, titulo, emisor, modelo, vigencia_desde, vigencia_hasta, planes, condiciones_generales, seguro, identificacion_sistema, notas, explicacion, raw_result, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       id,
       parsed.titulo || '',
       parsed.emisor || '',
@@ -76,6 +77,7 @@ router.post('/analyze', authenticateToken, upload.single('file'), async (req, re
       parsed.seguro || '',
       JSON.stringify(parsed.identificacion_sistema || []),
       parsed.notas || '',
+      parsed.explicacion || '',
       JSON.stringify(parsed),
       now,
     );
