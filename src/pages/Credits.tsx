@@ -137,7 +137,21 @@ function exportPDF(campaigns: Campaign[], from: string, to: string) {
         headStyles: { fillColor: [38, 46, 99] },
         margin: { left: 14, right: 14 },
       });
-      y = (doc as any).lastAutoTable.finalY + 10;
+      y = (doc as any).lastAutoTable.finalY + 6;
+    }
+
+    if (c.explicacion) {
+      if (y > 230) { doc.addPage(); y = 20; }
+      doc.setFontSize(9);
+      doc.setTextColor(30, 60, 120);
+      doc.text('Explicación:', 14, y);
+      y += 5;
+      doc.setTextColor(40);
+      const lines = doc.splitTextToSize(c.explicacion, 182);
+      doc.text(lines, 14, y);
+      y += lines.length * 4.5 + 10;
+    } else {
+      y += 4;
     }
   });
 
