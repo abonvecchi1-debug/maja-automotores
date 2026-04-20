@@ -21,6 +21,7 @@ import { Transfers } from './pages/Transfers';
 import { Leads } from './pages/Leads';
 import { DailyCash } from './pages/DailyCash';
 import { Credits } from './pages/Credits';
+import { Reports } from './pages/Reports';
 
 /** Runs checkAuth on mount and loads all app data once authenticated. */
 function AuthInitializer({ children }: { children: React.ReactNode }) {
@@ -119,6 +120,7 @@ export default function App() {
             {/* Available to all authenticated users */}
             <Route path="tareas" element={<Tasks />} />
             <Route path="creditos" element={<Credits />} />
+            <Route path="reportes" element={<ProtectedRoute allowedRoles={['admin']}><Reports /></ProtectedRoute>} />
           </Route>
 
           {/* Fallback */}
