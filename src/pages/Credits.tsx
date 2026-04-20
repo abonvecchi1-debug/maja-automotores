@@ -109,11 +109,11 @@ export function Credits() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
-      if (!res.ok) throw new Error('Error al analizar');
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al analizar');
       setResult(data.result);
-    } catch {
-      setError('No se pudo analizar la imagen. Intentá de nuevo.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'No se pudo analizar la imagen.');
     } finally {
       setLoading(false);
     }
