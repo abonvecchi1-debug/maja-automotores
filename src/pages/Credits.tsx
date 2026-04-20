@@ -1,6 +1,11 @@
-import { useState, useRef } from 'react';
-import { Upload, Loader2, FileImage, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { useAuthStore } from '../store/authStore';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Upload, Loader2, FileImage, X, Trash2, FileDown, TableIcon, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+
+const TOKEN_KEY = 'maja-auth-token';
+const getToken = () => localStorage.getItem(TOKEN_KEY);
 
 interface CreditPlan {
   nombre: string;
@@ -12,18 +17,19 @@ interface CreditPlan {
   observaciones?: string;
 }
 
-interface CreditResult {
-  titulo?: string;
-  emisor?: string;
-  vigencia?: { desde: string; hasta: string };
-  modelo?: string;
-  condiciones?: string;
-  planes?: CreditPlan[];
-  condiciones_generales?: string[];
-  seguro?: string;
-  identificacion_sistema?: string[];
-  notas?: string;
-  raw?: string;
+interface Campaign {
+  id: string;
+  titulo: string;
+  emisor: string;
+  modelo: string;
+  vigencia_desde: string;
+  vigencia_hasta: string;
+  planes: CreditPlan[];
+  condiciones_generales: string[];
+  seguro: string;
+  identificacion_sistema: string[];
+  notas: string;
+  created_at: string;
 }
 
 function fmt(n: number | undefined) {
@@ -31,68 +37,187 @@ function fmt(n: number | undefined) {
   return n.toLocaleString('es-AR');
 }
 
-function PlanCard({ plan }: { plan: CreditPlan }) {
+function PlanTable({ planes }: { planes: CreditPlan[] }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="font-semibold text-gray-800 text-sm">{plan.nombre || `${plan.plazo_meses} meses`}</span>
-        <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">
-          {plan.plazo_meses}m
-        </span>
+    <div className="overflow-x-auto mt-3">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="bg-gray-100">
+            <th className="text-left px-3 py-2 font-semibold text-gray-600 border border-gray-200">Plazo</th>
+            <th className="text-left px-3 py-2 font-semibold text-gray-600 border border-gray-200">TNA</th>
+            <th className="text-left px-3 py-2 font-semibold text-gray-600 border border-gray-200">Quebranto</th>
+            <th className="text-left px-3 py-2 font-semibold text-gray-600 border border-gray-200">Máx. Capital</th>
+            <th className="text-left px-3 py-2 font-semibold text-gray-600 border border-gray-200">Cuota/$1.000</th>
+          </tr>
+        </thead>
+        <tbody>
+          {planes.map((p, i) => (
+            <tr key={i} className="hover:bg-gray-50">
+              <td className="px-3 py-2 border border-gray-200 font-medium">{p.plazo_meses}m</td>
+              <td className="px-3 py-2 border border-gray-200">{p.tna}%</td>
+              <td className="px-3 py-2 border border-gray-200">{p.quebranto}%</td>
+              <td className="px-3 py-2 border border-gray-200">${fmt(p.maximo_capital)}</td>
+              <td className="px-3 py-2 border border-gray-200">${p.cuota_por_mil}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CampaignCard({ c, onDelete }: { c: Campaign; onDelete: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50" onClick={() => setOpen(!open)}>
+        <div className="min-w-0">
+          <p className="font-semibold text-gray-800 truncate">{c.titulo || 'Sin título'}</p>
+          <p className="text-xs text-gray-500">{c.emisor} · {c.modelo} · {c.vigencia_desde} → {c.vigencia_hasta}</p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+          <button onClick={(e) => { e.stopPropagation(); onDelete(c.id); }}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+            <Trash2 size={15} />
+          </button>
+          {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-sm">
-        <div className="bg-gray-50 rounded-lg p-2">
-          <p className="text-xs text-gray-500">TNA</p>
-          <p className="font-semibold text-gray-800">{plan.tna}%</p>
+      {open && c.planes.length > 0 && (
+        <div className="px-4 pb-4">
+          <PlanTable planes={c.planes} />
+          {c.notas && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-3">{c.notas}</p>}
         </div>
-        <div className="bg-gray-50 rounded-lg p-2">
-          <p className="text-xs text-gray-500">Quebranto</p>
-          <p className="font-semibold text-gray-800">{plan.quebranto}%</p>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-2">
-          <p className="text-xs text-gray-500">Máx. Capital</p>
-          <p className="font-semibold text-gray-800">${fmt(plan.maximo_capital)}</p>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-2">
-          <p className="text-xs text-gray-500">Cuota / $1.000</p>
-          <p className="font-semibold text-gray-800">${plan.cuota_por_mil}</p>
-        </div>
-      </div>
-      {plan.observaciones && (
-        <p className="text-xs text-gray-500 italic">{plan.observaciones}</p>
       )}
     </div>
   );
+}
+
+function exportPDF(campaigns: Campaign[], from: string, to: string) {
+  const doc = new jsPDF();
+  const label = from && to ? `${from} al ${to}` : 'Todas las fechas';
+
+  doc.setFontSize(18);
+  doc.text('Historial de Campañas de Crédito', 14, 20);
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text(`Período: ${label}`, 14, 28);
+  doc.text(`Generado: ${new Date().toLocaleDateString('es-AR')}`, 14, 34);
+
+  let y = 42;
+  campaigns.forEach((c) => {
+    if (y > 240) { doc.addPage(); y = 20; }
+    doc.setFontSize(12);
+    doc.setTextColor(30);
+    doc.text(c.titulo || 'Sin título', 14, y);
+    doc.setFontSize(9);
+    doc.setTextColor(80);
+    doc.text(`${c.emisor} · ${c.modelo} · Vigencia: ${c.vigencia_desde} → ${c.vigencia_hasta}`, 14, y + 5);
+    y += 12;
+
+    if (c.planes.length > 0) {
+      autoTable(doc, {
+        startY: y,
+        head: [['Plazo', 'TNA', 'Quebranto', 'Máx. Capital', 'Cuota/$1.000']],
+        body: c.planes.map((p) => [
+          `${p.plazo_meses}m`,
+          `${p.tna}%`,
+          `${p.quebranto}%`,
+          `$${fmt(p.maximo_capital)}`,
+          `$${p.cuota_por_mil}`,
+        ]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [38, 46, 99] },
+        margin: { left: 14, right: 14 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 10;
+    }
+  });
+
+  doc.save(`creditos-${from || 'todos'}-${to || ''}.pdf`);
+}
+
+function exportExcel(campaigns: Campaign[], from: string, to: string) {
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Campañas
+  const campRows = campaigns.map((c) => ({
+    'Título': c.titulo,
+    'Emisor': c.emisor,
+    'Modelo': c.modelo,
+    'Vigencia Desde': c.vigencia_desde,
+    'Vigencia Hasta': c.vigencia_hasta,
+    'Seguro': c.seguro,
+    'Notas': c.notas,
+    'Fecha Carga': new Date(c.created_at).toLocaleDateString('es-AR'),
+  }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(campRows), 'Campañas');
+
+  // Sheet 2: Planes
+  const planRows: object[] = [];
+  campaigns.forEach((c) => {
+    c.planes.forEach((p) => {
+      planRows.push({
+        'Campaña': c.titulo,
+        'Emisor': c.emisor,
+        'Modelo': c.modelo,
+        'Plan': p.nombre,
+        'Plazo (meses)': p.plazo_meses,
+        'TNA (%)': p.tna,
+        'Quebranto (%)': p.quebranto,
+        'Máx. Capital ($)': p.maximo_capital,
+        'Cuota por $1.000': p.cuota_por_mil,
+        'Observaciones': p.observaciones || '',
+      });
+    });
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(planRows), 'Planes');
+
+  const label = from && to ? `${from}_${to}` : 'todos';
+  XLSX.writeFile(wb, `creditos-${label}.xlsx`);
 }
 
 export function Credits() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<CreditResult | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showConditions, setShowConditions] = useState(false);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const token = localStorage.getItem('maja-auth-token');
+
+  const loadCampaigns = useCallback(async (f?: string, t?: string) => {
+    setLoadingHistory(true);
+    try {
+      const params = new URLSearchParams();
+      if (f) params.set('from', f);
+      if (t) params.set('to', t);
+      const res = await fetch(`/api/credits?${params}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      setCampaigns(data.campaigns || []);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, []);
+
+  useEffect(() => { loadCampaigns(); }, [loadCampaigns]);
 
   function handleFile(f: File) {
     setFile(f);
-    setResult(null);
+    setSavedId(null);
     setError(null);
-    const url = URL.createObjectURL(f);
-    setPreview(url);
-  }
-
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    const f = e.dataTransfer.files[0];
-    if (f) handleFile(f);
+    setPreview(URL.createObjectURL(f));
   }
 
   function handleClear() {
     setFile(null);
     setPreview(null);
-    setResult(null);
+    setSavedId(null);
     setError(null);
     if (inputRef.current) inputRef.current.value = '';
   }
@@ -106,12 +231,13 @@ export function Credits() {
       formData.append('file', file);
       const res = await fetch('/api/credits/analyze', {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { Authorization: `Bearer ${getToken()}` },
         body: formData,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al analizar');
-      setResult(data.result);
+      setSavedId(data.id);
+      loadCampaigns(from, to);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'No se pudo analizar la imagen.');
     } finally {
@@ -119,145 +245,109 @@ export function Credits() {
     }
   }
 
+  async function deleteCampaign(id: string) {
+    await fetch(`/api/credits/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    setCampaigns((prev) => prev.filter((c) => c.id !== id));
+  }
+
+  function applyFilter() { loadCampaigns(from, to); }
+
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-6 max-w-4xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Créditos y Campañas</h1>
-        <p className="text-gray-500 text-sm mt-1">Subí una foto o imagen de una campaña de financiamiento y la analizamos automáticamente.</p>
+        <p className="text-gray-500 text-sm mt-1">Subí una foto de una campaña de financiamiento para analizarla y guardarla automáticamente.</p>
       </div>
 
-      {/* Upload area */}
+      {/* Upload */}
       {!file ? (
-        <div
-          onDrop={handleDrop}
+        <div onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
           onDragOver={(e) => e.preventDefault()}
           onClick={() => inputRef.current?.click()}
-          className="border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all"
-        >
+          className="border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
           <FileImage size={40} className="mx-auto text-gray-300 mb-3" />
           <p className="text-gray-600 font-medium">Arrastrá la imagen acá o hacé click para seleccionar</p>
           <p className="text-gray-400 text-sm mt-1">JPG, PNG, WEBP — hasta 10MB</p>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-          />
+          <input ref={inputRef} type="file" accept="image/*" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="relative rounded-2xl overflow-hidden border border-gray-200 bg-gray-50">
-            <button
-              onClick={handleClear}
-              className="absolute top-3 right-3 z-10 bg-white rounded-full p-1.5 shadow hover:bg-red-50 transition-colors"
-            >
+            <button onClick={handleClear} className="absolute top-3 right-3 z-10 bg-white rounded-full p-1.5 shadow hover:bg-red-50">
               <X size={16} className="text-gray-500" />
             </button>
-            <img src={preview!} alt="Campaña" className="max-h-80 w-full object-contain p-4" />
+            <img src={preview!} alt="Campaña" className="max-h-72 w-full object-contain p-4" />
           </div>
 
-          <button
-            onClick={analyze}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 rounded-xl transition-colors"
-          >
-            {loading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
-            {loading ? 'Analizando...' : 'Analizar campaña'}
-          </button>
+          {savedId ? (
+            <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 rounded-xl px-4 py-3 text-sm">
+              <CheckCircle size={16} /> Analizado y guardado correctamente
+            </div>
+          ) : (
+            <button onClick={analyze} disabled={loading}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 rounded-xl transition-colors">
+              {loading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+              {loading ? 'Analizando...' : 'Analizar campaña'}
+            </button>
+          )}
         </div>
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
-          {error}
-        </div>
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">{error}</div>
       )}
 
-      {/* Results */}
-      {result && (
-        <div className="space-y-4">
-          {result.raw ? (
-            <div className="bg-gray-50 rounded-xl p-4">
-              <pre className="text-sm text-gray-700 whitespace-pre-wrap">{result.raw}</pre>
-            </div>
-          ) : (
-            <>
-              {/* Header info */}
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-5 text-white">
-                <p className="text-blue-200 text-xs font-medium uppercase tracking-wider">{result.emisor}</p>
-                <h2 className="text-xl font-bold mt-1">{result.titulo}</h2>
-                {result.modelo && <p className="text-blue-100 text-sm mt-1">Modelo: {result.modelo}</p>}
-                {result.vigencia && (
-                  <p className="text-blue-200 text-xs mt-2">
-                    Vigencia: {result.vigencia.desde} → {result.vigencia.hasta}
-                  </p>
-                )}
-              </div>
+      {/* History */}
+      <div>
+        <h2 className="text-lg font-bold text-gray-800 mb-4">Historial de campañas</h2>
 
-              {/* Plans */}
-              {result.planes && result.planes.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Planes disponibles</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {result.planes.map((plan, i) => <PlanCard key={i} plan={plan} />)}
-                  </div>
-                </div>
-              )}
-
-              {/* Conditions */}
-              {result.condiciones_generales && result.condiciones_generales.length > 0 && (
-                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                  <button
-                    onClick={() => setShowConditions(!showConditions)}
-                    className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    Condiciones generales
-                    {showConditions ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  </button>
-                  {showConditions && (
-                    <ul className="px-4 pb-4 space-y-1">
-                      {result.condiciones_generales.map((c, i) => (
-                        <li key={i} className="text-sm text-gray-600 flex gap-2">
-                          <span className="text-gray-300 mt-0.5">•</span>
-                          {c}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-
-              {/* Seguro + Sistema IDs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {result.seguro && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                    <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-1">Seguro</p>
-                    <p className="text-sm text-amber-800">{result.seguro}</p>
-                  </div>
-                )}
-                {result.identificacion_sistema && result.identificacion_sistema.length > 0 && (
-                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">ID Sistema Web</p>
-                    <ul className="space-y-1">
-                      {result.identificacion_sistema.map((id, i) => (
-                        <li key={i} className="text-xs font-mono text-gray-600 bg-white border border-gray-200 rounded px-2 py-1">{id}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-
-              {result.notas && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                  <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wider mb-1">Aclaración importante</p>
-                  <p className="text-sm text-yellow-800">{result.notas}</p>
-                </div>
-              )}
-            </>
-          )}
+        {/* Filter + Export */}
+        <div className="flex flex-wrap gap-3 mb-4 items-end">
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Desde</label>
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Hasta</label>
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <button onClick={applyFilter}
+            className="px-4 py-2 bg-gray-800 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors">
+            Filtrar
+          </button>
+          <div className="flex gap-2 ml-auto">
+            <button onClick={() => exportPDF(campaigns, from, to)} disabled={campaigns.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors">
+              <FileDown size={15} /> PDF
+            </button>
+            <button onClick={() => exportExcel(campaigns, from, to)} disabled={campaigns.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors">
+              <TableIcon size={15} /> Excel
+            </button>
+          </div>
         </div>
-      )}
+
+        {loadingHistory ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 size={24} className="animate-spin text-gray-400" />
+          </div>
+        ) : campaigns.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <FileImage size={40} className="mx-auto mb-3 opacity-40" />
+            <p>No hay campañas guardadas</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {campaigns.map((c) => <CampaignCard key={c.id} c={c} onDelete={deleteCampaign} />)}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -242,6 +242,22 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS credit_campaigns (
+    id TEXT PRIMARY KEY,
+    titulo TEXT NOT NULL DEFAULT '',
+    emisor TEXT NOT NULL DEFAULT '',
+    modelo TEXT NOT NULL DEFAULT '',
+    vigencia_desde TEXT NOT NULL DEFAULT '',
+    vigencia_hasta TEXT NOT NULL DEFAULT '',
+    planes TEXT NOT NULL DEFAULT '[]',
+    condiciones_generales TEXT NOT NULL DEFAULT '[]',
+    seguro TEXT NOT NULL DEFAULT '',
+    identificacion_sistema TEXT NOT NULL DEFAULT '[]',
+    notas TEXT NOT NULL DEFAULT '',
+    raw_result TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  );
 `);
 
 export default db;
