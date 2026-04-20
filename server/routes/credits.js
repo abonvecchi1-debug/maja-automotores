@@ -7,19 +7,21 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 router.post('/analyze', authenticateToken, upload.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No se recibió archivo' });
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No se recibió archivo' });
+    if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY no configurada' });
 
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-  const imagePart = {
-    inlineData: {
-      data: req.file.buffer.toString('base64'),
-      mimeType: req.file.mimetype,
-    },
-  };
+    const imagePart = {
+      inlineData: {
+        data: req.file.buffer.toString('base64'),
+        mimeType: req.file.mimetype,
+      },
+    };
 
-  const prompt = `Analizá esta hoja de créditos/campañas de financiamiento automotor y devolvé la información estructurada en JSON con este formato exacto:
+    const prompt = `Analizá esta hoja de créditos/campañas de financiamiento automotor y devolvé la información estructurada en JSON con este formato exacto:
 {
   "titulo": "nombre de la campaña",
   "emisor": "empresa/banco",
@@ -43,22 +45,26 @@ router.post('/analyze', authenticateToken, upload.single('file'), async (req, re
 }
 Devolvé SOLO el JSON, sin texto extra ni markdown ni bloques de código.`;
 
-  const result = await model.generateContent([prompt, imagePart]);
-  const text = result.response.text().trim();
+    const result = await model.generateContent([prompt, imagePart]);
+    const text = result.response.text().trim();
 
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    const match = text.match(/\{[\s\S]*\}/);
+    let parsed;
     try {
-      parsed = match ? JSON.parse(match[0]) : { raw: text };
+      parsed = JSON.parse(text);
     } catch {
-      parsed = { raw: text };
+      const match = text.match(/\{[\s\S]*\}/);
+      try {
+        parsed = match ? JSON.parse(match[0]) : { raw: text };
+      } catch {
+        parsed = { raw: text };
+      }
     }
-  }
 
-  res.json({ result: parsed });
+    res.json({ result: parsed });
+  } catch (err) {
+    console.error('Error en /api/credits/analyze:', err);
+    res.status(500).json({ error: err.message || 'Error interno' });
+  }
 });
 
 export default router;
