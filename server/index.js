@@ -23,6 +23,7 @@ import dailyCashRoutes from './routes/dailyCash.js';
 import taxPaymentsRoutes from './routes/taxPayments.js';
 import settingsRoutes from './routes/settings.js';
 import dataRoutes from './routes/data.js';
+import creditsRoutes from './routes/credits.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -67,6 +68,7 @@ app.use('/api/leads', leadsRoutes);
 app.use('/api/daily-cash', dailyCashRoutes);
 app.use('/api/tax-payments', taxPaymentsRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/credits', creditsRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
