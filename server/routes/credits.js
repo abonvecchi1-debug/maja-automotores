@@ -1,5 +1,5 @@
 import express from 'express';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 import multer from 'multer';
 import { authenticateToken } from '../middleware/auth.js';
 
@@ -9,17 +9,11 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 router.post('/analyze', authenticateToken, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No se recibió archivo' });
-    if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY no configurada' });
+    if (!process.env.GROQ_API_KEY) return res.status(500).json({ error: 'GROQ_API_KEY no configurada' });
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
-    const imagePart = {
-      inlineData: {
-        data: req.file.buffer.toString('base64'),
-        mimeType: req.file.mimetype,
-      },
-    };
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const base64 = req.file.buffer.toString('base64');
+    const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
 
     const prompt = `Analizá esta hoja de créditos/campañas de financiamiento automotor y devolvé la información estructurada en JSON con este formato exacto:
 {
@@ -45,8 +39,21 @@ router.post('/analyze', authenticateToken, upload.single('file'), async (req, re
 }
 Devolvé SOLO el JSON, sin texto extra ni markdown ni bloques de código.`;
 
-    const result = await model.generateContent([prompt, imagePart]);
-    const text = result.response.text().trim();
+    const completion = await groq.chat.completions.create({
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: dataUrl } },
+            { type: 'text', text: prompt },
+          ],
+        },
+      ],
+      max_tokens: 2048,
+    });
+
+    const text = completion.choices[0].message.content.trim();
 
     let parsed;
     try {
