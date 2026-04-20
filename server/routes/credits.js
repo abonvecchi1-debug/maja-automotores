@@ -1,12 +1,12 @@
 import express from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import multer from 'multer';
-import { authenticate } from '../middleware/auth.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-router.post('/analyze', authenticate, upload.single('file'), async (req, res) => {
+router.post('/analyze', authenticateToken, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No se recibió archivo' });
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
