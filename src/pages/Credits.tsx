@@ -3,6 +3,7 @@ import { Upload, Loader2, FileImage, X, Trash2, FileDown, TableIcon, ChevronDown
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { CreditCalculator } from '../components/CreditCalculator';
 
 const TOKEN_KEY = 'maja-auth-token';
 const getToken = () => localStorage.getItem(TOKEN_KEY);
@@ -199,6 +200,7 @@ function exportExcel(campaigns: Campaign[], from: string, to: string) {
 }
 
 export function Credits() {
+  const [activeTab, setActiveTab] = useState<'calculadora' | 'campanas'>('calculadora');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -277,13 +279,43 @@ export function Credits() {
   function applyFilter() { loadCampaigns(from, to); }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-8">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Page title + tabs */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Créditos y Campañas</h1>
-        <p className="text-gray-500 text-sm mt-1">Subí una foto de una campaña de financiamiento para analizarla y guardarla automáticamente.</p>
+        <h1 className="text-2xl font-bold text-gray-900">Créditos</h1>
+        <div className="flex gap-1 mt-4 bg-gray-100 rounded-xl p-1 w-fit">
+          {(
+            [
+              { key: 'calculadora', label: 'Calculadora' },
+              { key: 'campanas', label: 'Campañas' },
+            ] as const
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === key
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Upload */}
+      {/* Calculator tab */}
+      {activeTab === 'calculadora' && <CreditCalculator />}
+
+      {/* Campaigns tab */}
+      {activeTab === 'campanas' && (
+        <div className="max-w-4xl space-y-8">
+          <p className="text-gray-500 text-sm -mt-2">
+            Subí una foto de una campaña de financiamiento para analizarla y guardarla automáticamente.
+          </p>
+
+          {/* Upload */}
       {!file ? (
         <div onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
           onDragOver={(e) => e.preventDefault()}
@@ -369,6 +401,8 @@ export function Credits() {
           </div>
         )}
       </div>
+        </div>
+      )}
     </div>
   );
 }
