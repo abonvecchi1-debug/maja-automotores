@@ -89,7 +89,7 @@ function calcular(s: ScenarioInput): CalcResult | null {
   if (montoFinanciado <= 0) return null;
 
   const tasaRaw = pf(s.tasa);
-  if (tasaRaw <= 0) return null;
+  // tasaRaw = 0 is valid (0% interest — cuota = capital / n)
 
   const n = Math.round(pf(s.plazo));
   if (n <= 0) return null;
@@ -99,8 +99,10 @@ function calcular(s: ScenarioInput): CalcResult | null {
   else if (s.tipoTasa === 'anual_nominal') r = tasaRaw / 100 / 12;
   else r = Math.pow(1 + tasaRaw / 100, 1 / 12) - 1;
 
-  const factor = Math.pow(1 + r, n);
-  const cuota = montoFinanciado * (r * factor) / (factor - 1);
+  // French system: when r=0 cuota = P/n, otherwise use standard formula
+  const cuota = r === 0
+    ? montoFinanciado / n
+    : montoFinanciado * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
   const totalAPagar = cuota * n;
   const interesTotal = totalAPagar - montoFinanciado;
 
