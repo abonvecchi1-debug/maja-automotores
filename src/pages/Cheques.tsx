@@ -94,6 +94,15 @@ function emptyForm(): Omit<Cheque, 'id' | 'createdAt'> {
 
 const iCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white';
 
+function FL({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+      {children}
+    </div>
+  );
+}
+
 function ChequeModal({
   initial,
   onSave,
@@ -107,15 +116,6 @@ function ChequeModal({
 
   function set<K extends keyof typeof form>(key: K, val: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: val }));
-  }
-
-  function FL({ label, children }: { label: string; children: React.ReactNode }) {
-    return (
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-        {children}
-      </div>
-    );
   }
 
   return (
