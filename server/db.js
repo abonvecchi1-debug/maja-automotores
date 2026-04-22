@@ -260,6 +260,25 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS cheques (
+    id TEXT PRIMARY KEY,
+    numero TEXT NOT NULL DEFAULT '',
+    banco TEXT NOT NULL DEFAULT '',
+    monto REAL NOT NULL DEFAULT 0,
+    moneda TEXT NOT NULL DEFAULT 'ARS',
+    fecha_emision TEXT NOT NULL DEFAULT '',
+    fecha_vencimiento TEXT NOT NULL DEFAULT '',
+    tipo TEXT NOT NULL DEFAULT 'al_dia',
+    al_portador INTEGER NOT NULL DEFAULT 0,
+    endosado INTEGER NOT NULL DEFAULT 0,
+    librador TEXT NOT NULL DEFAULT '',
+    cuit_librador TEXT NOT NULL DEFAULT '',
+    recibido_de TEXT NOT NULL DEFAULT '',
+    entregado_a TEXT NOT NULL DEFAULT '',
+    estado TEXT NOT NULL DEFAULT 'en_cartera',
+    observaciones TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  );
 
 `);
 

@@ -3,7 +3,7 @@ import { clsx } from 'clsx';
 import {
   LayoutDashboard, Car, Users, Wrench,
   TrendingUp, Receipt, CheckSquare, FileText,
-  UserCog, LogOut, ArrowLeftRight, MessageSquare, Wallet, X, Banknote, BarChart2,
+  UserCog, LogOut, ArrowLeftRight, MessageSquare, Wallet, X, Banknote, BarChart2, ClipboardList,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
@@ -28,6 +28,7 @@ const navItems: NavItem[] = [
   { to: '/gastos-fijos',    icon: Receipt,         label: 'Gastos Fijos',    roles: ['admin'] },
   { to: '/tareas',          icon: CheckSquare,     label: 'Tareas' },
   { to: '/creditos',        icon: Banknote,        label: 'Créditos' },
+  { to: '/cheques',         icon: ClipboardList,   label: 'Cheques' },
   { to: '/reportes',        icon: BarChart2,        label: 'Reportes',        roles: ['admin'] },
   { to: '/impuestos',       icon: FileText,        label: 'Impuestos',       roles: ['admin'] },
   { to: '/usuarios',        icon: UserCog,         label: 'Usuarios',        roles: ['admin'] },
