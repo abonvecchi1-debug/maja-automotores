@@ -23,6 +23,7 @@ asarUnpack:
   - "**/node_modules/better-sqlite3/**"
 
 win:
+  icon: assets/icon.png
   target:
     - target: nsis
       arch: x64

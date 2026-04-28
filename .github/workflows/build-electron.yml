@@ -19,11 +19,13 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Generate app icon
+        run: |
+          npm install --no-save sharp
+          node scripts/generate-icon.cjs
+
       - name: Build React frontend
         run: npm run build
-
-      - name: Rebuild better-sqlite3 for Electron
-        run: npx @electron/rebuild -f -w better-sqlite3
 
       - name: Build Electron installer
         run: npx electron-builder --win
