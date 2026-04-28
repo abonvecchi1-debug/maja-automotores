@@ -23,6 +23,7 @@ import { DailyCash } from './pages/DailyCash';
 import { Credits } from './pages/Credits';
 import { Reports } from './pages/Reports';
 import { Cheques } from './pages/Cheques';
+import { SyncSettings } from './pages/SyncSettings';
 
 /** Runs checkAuth on mount and loads all app data once authenticated. */
 function AuthInitializer({ children }: { children: React.ReactNode }) {
@@ -123,6 +124,7 @@ export default function App() {
             <Route path="creditos" element={<Credits />} />
             <Route path="cheques" element={<Cheques />} />
             <Route path="reportes" element={<ProtectedRoute allowedRoles={['admin']}><Reports /></ProtectedRoute>} />
+            <Route path="sincronizacion" element={<ProtectedRoute allowedRoles={['admin']}><SyncSettings /></ProtectedRoute>} />
           </Route>
 
           {/* Fallback */}

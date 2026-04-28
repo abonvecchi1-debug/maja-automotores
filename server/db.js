@@ -285,4 +285,43 @@ db.exec(`
 // Migrations for existing DBs
 try { db.exec(`ALTER TABLE credit_campaigns ADD COLUMN explicacion TEXT NOT NULL DEFAULT ''`); } catch {}
 
+// Sync infrastructure
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sync_config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+`);
+
+// Tables that participate in cloud sync
+export const SYNCABLE_TABLES = [
+  'vehicles', 'clients', 'sales', 'installment_payments',
+  'suppliers', 'expenses', 'tasks', 'transactions',
+  'transfers', 'leads', 'contact_history', 'daily_cashes', 'cash_movements',
+  'fixed_expense_types', 'fixed_expense_records', 'tax_payments',
+  'credit_campaigns', 'cheques',
+];
+
+// Add updated_at column and auto-update triggers to every sync table
+for (const t of SYNCABLE_TABLES) {
+  try { db.exec(`ALTER TABLE ${t} ADD COLUMN updated_at TEXT`); } catch {}
+  try { db.exec(`UPDATE ${t} SET updated_at = created_at WHERE updated_at IS NULL`); } catch {}
+  try {
+    db.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_${t}_insert
+      AFTER INSERT ON ${t}
+      BEGIN
+        UPDATE ${t} SET updated_at = datetime('now') WHERE id = NEW.id AND updated_at IS NULL;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_${t}_update
+      AFTER UPDATE ON ${t}
+      WHEN OLD.updated_at = NEW.updated_at OR NEW.updated_at IS NULL
+      BEGIN
+        UPDATE ${t} SET updated_at = datetime('now') WHERE id = NEW.id;
+      END;
+    `);
+  } catch {}
+}
+
 export default db;

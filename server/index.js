@@ -27,6 +27,8 @@ import dataRoutes from './routes/data.js';
 import creditsRoutes from './routes/credits.js';
 import reportsRoutes from './routes/reports.js';
 import chequesRoutes from './routes/cheques.js';
+import syncRoutes from './routes/sync.js';
+import { start as startSync } from './sync-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,6 +77,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/credits', creditsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/cheques', chequesRoutes);
+app.use('/api/sync', syncRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -96,4 +99,5 @@ app.listen(PORT, () => {
       .run('Administrador', 'admin@maja.com', hashedPw);
   }
   console.log(`Servidor Maja Automotores corriendo en http://localhost:${PORT}`);
+  startSync();
 });

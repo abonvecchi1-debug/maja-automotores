@@ -3,9 +3,10 @@ import { clsx } from 'clsx';
 import {
   LayoutDashboard, Car, Users, Wrench,
   TrendingUp, Receipt, CheckSquare, FileText,
-  UserCog, LogOut, ArrowLeftRight, MessageSquare, Wallet, X, Banknote, BarChart2, ClipboardList,
+  UserCog, LogOut, ArrowLeftRight, MessageSquare, Wallet, X, Banknote, BarChart2, ClipboardList, RefreshCw,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import { SyncStatus } from './SyncStatus';
 
 const BRAND_NAVY = '#262e63';
 
@@ -29,9 +30,10 @@ const navItems: NavItem[] = [
   { to: '/tareas',          icon: CheckSquare,     label: 'Tareas' },
   { to: '/creditos',        icon: Banknote,        label: 'Créditos' },
   { to: '/cheques',         icon: ClipboardList,   label: 'Cheques' },
-  { to: '/reportes',        icon: BarChart2,        label: 'Reportes',        roles: ['admin'] },
+  { to: '/reportes',        icon: BarChart2,       label: 'Reportes',        roles: ['admin'] },
   { to: '/impuestos',       icon: FileText,        label: 'Impuestos',       roles: ['admin'] },
   { to: '/usuarios',        icon: UserCog,         label: 'Usuarios',        roles: ['admin'] },
+  { to: '/sincronizacion',  icon: RefreshCw,       label: 'Sincronización',  roles: ['admin'] },
 ];
 
 const roleLabel: Record<'admin' | 'empleado', string> = {
@@ -138,6 +140,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             </NavLink>
           ))}
         </nav>
+
+        {/* ── Sync status indicator ── */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <SyncStatus />
+        </div>
 
         {/* ── User info + logout ── */}
         {user && (

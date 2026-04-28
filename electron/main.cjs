@@ -34,14 +34,23 @@ async function startServer() {
   const uploadsDir = path.join(userData, 'uploads');
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-  // Generate or load persistent JWT secret
-  const secretFile = path.join(userData, 'jwt_secret.txt');
-  if (!fs.existsSync(secretFile)) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let secret = '';
-    for (let i = 0; i < 64; i++) secret += chars[Math.floor(Math.random() * chars.length)];
-    fs.writeFileSync(secretFile, secret, 'utf8');
+  // Generate or load persistent secrets
+  function getOrCreate(file, len = 64) {
+    if (!fs.existsSync(file)) {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let s = '';
+      for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
+      fs.writeFileSync(file, s, 'utf8');
+    }
+    return fs.readFileSync(file, 'utf8').trim();
   }
+
+  const jwtSecret  = getOrCreate(path.join(userData, 'jwt_secret.txt'));
+  const syncApiKey = getOrCreate(path.join(userData, 'sync_api_key.txt'), 48);
+
+  // Load saved Render URL if configured
+  const renderUrlFile = path.join(userData, 'render_url.txt');
+  const renderUrl = fs.existsSync(renderUrlFile) ? fs.readFileSync(renderUrlFile, 'utf8').trim() : '';
 
   // Set all env vars before importing the server (dotenv won't override existing vars)
   Object.assign(process.env, {
@@ -52,7 +61,9 @@ async function startServer() {
     DIST_PATH: app.isPackaged
       ? path.join(process.resourcesPath, 'dist')
       : path.join(app.getAppPath(), 'dist'),
-    JWT_SECRET: fs.readFileSync(secretFile, 'utf8').trim(),
+    JWT_SECRET: jwtSecret,
+    SYNC_API_KEY: syncApiKey,
+    ...(renderUrl && { RENDER_URL: renderUrl }),
   });
 
   const serverEntry = path.join(app.getAppPath(), 'server', 'index.js');
