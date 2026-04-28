@@ -78,6 +78,23 @@ function upsertRecords(table, records) {
   }
 }
 
+/* ── Apply deletions received from remote ───────────────────────────────── */
+
+function applyDeletions(deletions) {
+  if (!deletions?.length) return;
+  for (const { id, table_name, deleted_at } of deletions) {
+    if (!SYNCABLE_TABLES.includes(table_name)) continue;
+    try {
+      db.prepare(`DELETE FROM ${table_name} WHERE id = ?`).run(id);
+      // Overwrite the timestamp set by the DELETE trigger with the original one
+      db.prepare(`INSERT OR REPLACE INTO sync_deletions (id, table_name, deleted_at) VALUES (?, ?, ?)`)
+        .run(id, table_name, deleted_at);
+    } catch (err) {
+      console.error(`[sync] delete ${table_name}/${id}:`, err.message);
+    }
+  }
+}
+
 /* ── Pull from Render ───────────────────────────────────────────────────── */
 
 async function pull(renderUrl, apiKey, since) {
@@ -86,7 +103,9 @@ async function pull(renderUrl, apiKey, since) {
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`Pull HTTP ${res.status}`);
-  return res.json();
+  const raw = await res.json();
+  const { _deletions: deletions = [], ...records } = raw;
+  return { records, deletions };
 }
 
 /* ── Push to Render ─────────────────────────────────────────────────────── */
@@ -99,12 +118,13 @@ async function push(renderUrl, apiKey, since) {
       if (rows.length) data[table] = rows;
     } catch {}
   }
-  if (!Object.keys(data).length) return;
+  const deletions = db.prepare(`SELECT * FROM sync_deletions WHERE deleted_at > ?`).all(since);
+  if (!Object.keys(data).length && !deletions.length) return;
 
   const res = await fetch(`${renderUrl}/api/sync/push`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Sync-Key': apiKey },
-    body: JSON.stringify({ data }),
+    body: JSON.stringify({ data, deletions }),
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`Push HTTP ${res.status}`);
@@ -125,10 +145,11 @@ async function sync() {
     const since = getLastSync();
     const syncStart = new Date().toISOString();
 
-    const remoteData = await pull(renderUrl, apiKey, since);
+    const { records: remoteData, deletions: remoteDeletions } = await pull(renderUrl, apiKey, since);
     for (const [table, records] of Object.entries(remoteData)) {
       upsertRecords(table, records);
     }
+    applyDeletions(remoteDeletions);
 
     await push(renderUrl, apiKey, since);
 

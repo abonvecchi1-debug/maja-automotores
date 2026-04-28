@@ -291,6 +291,13 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS sync_deletions (
+    id TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    deleted_at TEXT NOT NULL,
+    PRIMARY KEY (id, table_name)
+  );
 `);
 
 // Tables that participate in cloud sync
@@ -328,6 +335,15 @@ for (const t of SYNCABLE_TABLES) {
     WHEN OLD.updated_at = NEW.updated_at OR NEW.updated_at IS NULL
     BEGIN
       UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = NEW.id;
+    END;
+  `);
+  db.exec(`DROP TRIGGER IF EXISTS trg_${t}_delete`);
+  db.exec(`
+    CREATE TRIGGER trg_${t}_delete
+    AFTER DELETE ON ${t}
+    BEGIN
+      INSERT OR REPLACE INTO sync_deletions (id, table_name, deleted_at)
+      VALUES (OLD.id, '${t}', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));
     END;
   `);
 }
