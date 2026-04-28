@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Cloud, CloudOff, RefreshCw, Save, Copy, Check, Wifi, WifiOff } from 'lucide-react';
+import { Cloud, CloudOff, RefreshCw, Save, Check } from 'lucide-react';
 
 const TOKEN_KEY = 'maja-auth-token';
 const getToken = () => localStorage.getItem(TOKEN_KEY);
@@ -7,7 +7,7 @@ const getToken = () => localStorage.getItem(TOKEN_KEY);
 interface SyncConfig {
   renderUrl: string;
   lastSync: string | null;
-  apiKey: string;
+  syncKey: string;
 }
 
 interface SyncStatus {
@@ -27,9 +27,9 @@ export function SyncSettings() {
   const [config, setConfig] = useState<SyncConfig | null>(null);
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [renderUrl, setRenderUrl] = useState('');
+  const [syncKey, setSyncKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
@@ -41,6 +41,7 @@ export function SyncSettings() {
       const data: SyncConfig = await res.json();
       setConfig(data);
       setRenderUrl(data.renderUrl);
+      setSyncKey(data.syncKey);
     }
   }
 
@@ -65,7 +66,7 @@ export function SyncSettings() {
       const res = await fetch('/api/sync/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ renderUrl }),
+        body: JSON.stringify({ renderUrl, syncKey }),
       });
       if (!res.ok) throw new Error('Error al guardar');
       setSaved(true);
@@ -96,13 +97,6 @@ export function SyncSettings() {
     }
   }
 
-  function copyKey() {
-    if (config?.apiKey) {
-      navigator.clipboard.writeText(config.apiKey);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  }
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -181,33 +175,24 @@ export function SyncSettings() {
         {error && <p className="text-sm text-red-500">{error}</p>}
       </div>
 
-      {/* API Key */}
+      {/* Sync Key */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
         <h2 className="font-semibold text-gray-800">Clave de sincronización</h2>
         <p className="text-sm text-gray-500">
-          Copiá esta clave y agregala en Render como variable de entorno <code className="bg-gray-100 px-1 rounded">SYNC_API_KEY</code>
+          Ingresá la misma clave que configuraste en Render como variable de entorno <code className="bg-gray-100 px-1 rounded">SYNC_API_KEY</code>. Todas las PCs deben usar la misma clave.
         </p>
-        <div className="flex gap-2">
-          <input
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono bg-gray-50 text-gray-700"
-            value={config?.apiKey || ''}
-            readOnly
-          />
-          <button
-            onClick={copyKey}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-          >
-            {copied ? <Check size={15} className="text-green-600" /> : <Copy size={15} />}
-            {copied ? 'Copiado' : 'Copiar'}
-          </button>
-        </div>
+        <input
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"
+          value={syncKey}
+          onChange={e => setSyncKey(e.target.value)}
+          placeholder="Clave secreta definida en Render"
+          type="password"
+        />
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700 space-y-1">
           <p className="font-semibold">Pasos para activar la sincronización:</p>
           <ol className="list-decimal list-inside space-y-1">
-            <li>Copiá la clave de arriba</li>
-            <li>En Render → tu servicio → Environment → agregá <code className="bg-amber-100 px-1 rounded">SYNC_API_KEY</code> con esa clave</li>
-            <li>Hacé redeploy en Render</li>
-            <li>Ingresá tu URL de Render arriba y guardá</li>
+            <li>En Render → tu servicio → Environment → agregá <code className="bg-amber-100 px-1 rounded">SYNC_API_KEY</code> con cualquier clave secreta y hacé redeploy</li>
+            <li>En cada PC: ingresá la URL de Render y esa misma clave acá arriba, y guardá</li>
             <li>La app va a sincronizar automáticamente cuando haya internet</li>
           </ol>
         </div>

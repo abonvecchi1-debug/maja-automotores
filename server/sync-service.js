@@ -24,7 +24,11 @@ function getRenderUrl() {
 }
 
 function getApiKey() {
-  return process.env.SYNC_API_KEY || '';
+  return (
+    db.prepare("SELECT value FROM sync_config WHERE key = 'sync_key'").get()?.value ||
+    process.env.SYNC_API_KEY ||
+    ''
+  );
 }
 
 function getLastSync() {

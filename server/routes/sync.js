@@ -29,15 +29,18 @@ router.get('/status', authenticateToken, (req, res) => {
 router.get('/config', authenticateToken, requireAdmin, (req, res) => {
   const renderUrl = db.prepare("SELECT value FROM sync_config WHERE key = 'render_url'").get()?.value || '';
   const lastSync  = db.prepare("SELECT value FROM sync_config WHERE key = 'last_sync_at'").get()?.value || null;
-  const apiKey    = process.env.SYNC_API_KEY || '';
-  res.json({ renderUrl, lastSync, apiKey });
+  const syncKey   = db.prepare("SELECT value FROM sync_config WHERE key = 'sync_key'").get()?.value || '';
+  res.json({ renderUrl, lastSync, syncKey });
 });
 
 router.put('/config', authenticateToken, requireAdmin, (req, res) => {
-  const { renderUrl } = req.body;
+  const { renderUrl, syncKey } = req.body;
   if (typeof renderUrl !== 'string') return res.status(400).json({ error: 'renderUrl required' });
   db.prepare("INSERT OR REPLACE INTO sync_config (key, value) VALUES ('render_url', ?)")
     .run(renderUrl.trim().replace(/\/+$/, ''));
+  if (typeof syncKey === 'string' && syncKey.trim()) {
+    db.prepare("INSERT OR REPLACE INTO sync_config (key, value) VALUES ('sync_key', ?)").run(syncKey.trim());
+  }
   res.json({ ok: true });
 });
 

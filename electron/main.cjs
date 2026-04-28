@@ -45,12 +45,7 @@ async function startServer() {
     return fs.readFileSync(file, 'utf8').trim();
   }
 
-  const jwtSecret  = getOrCreate(path.join(userData, 'jwt_secret.txt'));
-  const syncApiKey = getOrCreate(path.join(userData, 'sync_api_key.txt'), 48);
-
-  // Load saved Render URL if configured
-  const renderUrlFile = path.join(userData, 'render_url.txt');
-  const renderUrl = fs.existsSync(renderUrlFile) ? fs.readFileSync(renderUrlFile, 'utf8').trim() : '';
+  const jwtSecret = getOrCreate(path.join(userData, 'jwt_secret.txt'));
 
   // Set all env vars before importing the server (dotenv won't override existing vars)
   Object.assign(process.env, {
@@ -62,8 +57,6 @@ async function startServer() {
       ? path.join(process.resourcesPath, 'dist')
       : path.join(app.getAppPath(), 'dist'),
     JWT_SECRET: jwtSecret,
-    SYNC_API_KEY: syncApiKey,
-    ...(renderUrl && { RENDER_URL: renderUrl }),
   });
 
   const serverEntry = path.join(app.getAppPath(), 'server', 'index.js');
