@@ -4,6 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import bcrypt from 'bcryptjs';
 
 import db from './db.js';
 import authRoutes from './routes/auth.js';
@@ -42,11 +43,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Static files
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+const uploadsDir = process.env.UPLOADS_PATH || path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadsDir));
 
 // In production, serve the built React app
 if (!isDev) {
-  const distPath = path.join(__dirname, '../dist');
+  const distPath = process.env.DIST_PATH || path.join(__dirname, '../dist');
   if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
   }
@@ -80,15 +82,18 @@ app.get('/api/health', (req, res) => {
 
 // In production, all non-API routes serve the React app
 if (!isDev) {
+  const distPath = process.env.DIST_PATH || path.join(__dirname, '../dist');
   app.use((req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
+    res.sendFile(path.join(distPath, 'index.html'));
   });
 }
 
 app.listen(PORT, () => {
   const adminCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get();
   if (adminCount.count === 0) {
-    console.log('\n⚠️  No hay usuario administrador. Ejecutá: node server/seed-admin.js\n');
+    const hashedPw = bcrypt.hashSync('Maja2024!', 10);
+    db.prepare("INSERT INTO users (name, email, password, role, active) VALUES (?, ?, ?, 'admin', 1)")
+      .run('Administrador', 'admin@maja.com', hashedPw);
   }
   console.log(`Servidor Maja Automotores corriendo en http://localhost:${PORT}`);
 });

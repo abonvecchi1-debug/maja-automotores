@@ -1,0 +1,39 @@
+appId: com.majaautomotores.app
+productName: Maja Automotores
+copyright: Maja Automotores
+
+directories:
+  output: release
+
+files:
+  - server/**
+  - electron/**
+  - node_modules/**
+  - package.json
+  - "!src/**"
+  - "!.env*"
+  - "!release/**"
+  - "!.github/**"
+
+extraResources:
+  - from: dist
+    to: dist
+
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
+
+win:
+  target:
+    - target: nsis
+      arch: x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Maja Automotores
+  installerLanguages:
+    - es_AR
+  language: 3082

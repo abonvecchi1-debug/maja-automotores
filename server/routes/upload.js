@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 const router = express.Router();
 
 // Ensure upload directory exists
-const uploadDir = path.join(__dirname, '../../uploads/vehicles');
+const uploadDir = path.join(process.env.UPLOADS_PATH || path.join(__dirname, '../../uploads'), 'vehicles');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
