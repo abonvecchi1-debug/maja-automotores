@@ -305,23 +305,31 @@ export const SYNCABLE_TABLES = [
 // Add updated_at column and auto-update triggers to every sync table
 for (const t of SYNCABLE_TABLES) {
   try { db.exec(`ALTER TABLE ${t} ADD COLUMN updated_at TEXT`); } catch {}
+  // Backfill nulls from created_at
   try { db.exec(`UPDATE ${t} SET updated_at = created_at WHERE updated_at IS NULL`); } catch {}
+  // Normalize any SQLite-format timestamps ("YYYY-MM-DD HH:MM:SS") to ISO format
+  // SQLite format has a space at position 10; ISO format has 'T'
   try {
-    db.exec(`
-      CREATE TRIGGER IF NOT EXISTS trg_${t}_insert
-      AFTER INSERT ON ${t}
-      BEGIN
-        UPDATE ${t} SET updated_at = datetime('now') WHERE id = NEW.id AND updated_at IS NULL;
-      END;
-
-      CREATE TRIGGER IF NOT EXISTS trg_${t}_update
-      AFTER UPDATE ON ${t}
-      WHEN OLD.updated_at = NEW.updated_at OR NEW.updated_at IS NULL
-      BEGIN
-        UPDATE ${t} SET updated_at = datetime('now') WHERE id = NEW.id;
-      END;
-    `);
+    db.exec(`UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', updated_at) WHERE updated_at IS NOT NULL AND substr(updated_at, 11, 1) = ' '`);
   } catch {}
+  // Drop and recreate triggers to ensure ISO format (datetime('now') produces wrong format)
+  db.exec(`DROP TRIGGER IF EXISTS trg_${t}_insert`);
+  db.exec(`DROP TRIGGER IF EXISTS trg_${t}_update`);
+  db.exec(`
+    CREATE TRIGGER trg_${t}_insert
+    AFTER INSERT ON ${t}
+    BEGIN
+      UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = NEW.id AND updated_at IS NULL;
+    END;
+  `);
+  db.exec(`
+    CREATE TRIGGER trg_${t}_update
+    AFTER UPDATE ON ${t}
+    WHEN OLD.updated_at = NEW.updated_at OR NEW.updated_at IS NULL
+    BEGIN
+      UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = NEW.id;
+    END;
+  `);
 }
 
 export default db;
