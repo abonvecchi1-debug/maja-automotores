@@ -28,6 +28,7 @@ import creditsRoutes from './routes/credits.js';
 import reportsRoutes from './routes/reports.js';
 import chequesRoutes from './routes/cheques.js';
 import syncRoutes from './routes/sync.js';
+import publicRoutes from './routes/public.js';
 import { start as startSync } from './sync-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -57,6 +58,7 @@ if (!isDev) {
 }
 
 // API Routes
+app.use('/api/public', publicRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/upload', uploadRoutes);
