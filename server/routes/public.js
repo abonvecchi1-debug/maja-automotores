@@ -36,3 +36,5 @@ router.get('/vehicles', (req, res) => {
 
   res.json({ vehicles, total: vehicles.length });
 });
+
+export default router;
