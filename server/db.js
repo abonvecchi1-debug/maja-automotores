@@ -284,6 +284,7 @@ db.exec(`
 
 // Migrations for existing DBs
 try { db.exec(`ALTER TABLE credit_campaigns ADD COLUMN explicacion TEXT NOT NULL DEFAULT ''`); } catch {}
+try { db.exec(`ALTER TABLE cheques ADD COLUMN endosado_por TEXT NOT NULL DEFAULT ''`); } catch {}
 
 // Sync infrastructure
 db.exec(`

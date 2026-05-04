@@ -24,6 +24,7 @@ interface Cheque {
   tipo: Tipo;
   alPortador: boolean;
   endosado: boolean;
+  endosadoPor: string;
   librador: string;
   cuitLibrador: string;
   recibidoDe: string;
@@ -78,14 +79,18 @@ function vencimientoAlert(cheque: Cheque) {
   return null;
 }
 
+function unique(arr: string[]) {
+  return Array.from(new Set(arr.filter(Boolean))).sort();
+}
+
 /* ─── Empty form ─────────────────────────────────────────────────────────── */
 
 function emptyForm(): Omit<Cheque, 'id' | 'createdAt'> {
   return {
     numero: '', banco: '', monto: 0, moneda: 'ARS',
     fechaEmision: '', fechaVencimiento: '', tipo: 'al_dia',
-    alPortador: false, endosado: false, librador: '',
-    cuitLibrador: '', recibidoDe: '', entregadoA: '',
+    alPortador: false, endosado: false, endosadoPor: '',
+    librador: '', cuitLibrador: '', recibidoDe: '', entregadoA: '',
     estado: 'en_cartera', observaciones: '',
   };
 }
@@ -180,10 +185,17 @@ function ChequeModal({
             </label>
           </div>
 
+          {/* Endosado por (solo si endosado=true) */}
+          {form.endosado && (
+            <FL label="Endosado por (quién lo firmó al dorso)">
+              <input className={iCls} value={form.endosadoPor} onChange={e => set('endosadoPor', e.target.value)} placeholder="Nombre del endosante" />
+            </FL>
+          )}
+
           {/* Personas */}
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider border-t border-gray-100 pt-4">Personas</p>
           <div className="grid grid-cols-2 gap-4">
-            <FL label="Librador (quién firmó) *">
+            <FL label="Librador (quién firmó el cheque) *">
               <input className={iCls} value={form.librador} onChange={e => set('librador', e.target.value)} placeholder="Nombre del firmante" />
             </FL>
             <FL label="CUIT del librador">
@@ -192,7 +204,7 @@ function ChequeModal({
             <FL label="Recibido de (quién nos lo entregó) *">
               <input className={iCls} value={form.recibidoDe} onChange={e => set('recibidoDe', e.target.value)} placeholder="Nombre o empresa" />
             </FL>
-            <FL label="Entregado a (si se lo dimos a alguien)">
+            <FL label="Entregado a (si lo cedimos a alguien)">
               <input className={iCls} value={form.entregadoA} onChange={e => set('entregadoA', e.target.value)} placeholder="Nombre o empresa" />
             </FL>
           </div>
@@ -228,44 +240,85 @@ function ChequeModal({
 
 /* ─── Exports ────────────────────────────────────────────────────────────── */
 
-function exportPDF(cheques: Cheque[]) {
+interface PdfOptions {
+  title: string;
+  subtitle?: string;
+  isConstancia?: boolean;
+}
+
+function exportPDF(cheques: Cheque[], opts: PdfOptions) {
   const doc = new jsPDF('landscape');
   const navy: [number, number, number] = [38, 46, 99];
+  const today = new Date().toLocaleDateString('es-AR');
 
+  // Header
   doc.setFillColor(38, 46, 99);
-  doc.rect(0, 0, 297, 22, 'F');
+  doc.rect(0, 0, 297, opts.subtitle ? 28 : 22, 'F');
   doc.setFontSize(13);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.text('Planilla de Cheques — Maja Automotores', 14, 14);
+  doc.text(opts.title, 14, 14);
+  if (opts.subtitle) {
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(opts.subtitle, 14, 23);
+  }
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Generado: ${new Date().toLocaleDateString('es-AR')}`, 230, 14);
+  doc.text(`Fecha: ${today}`, 250, 14);
+
+  const startY = opts.subtitle ? 34 : 28;
+
+  // Totals by currency
+  const totalARS = cheques.filter(c => c.moneda === 'ARS').reduce((s, c) => s + c.monto, 0);
+  const totalUSD = cheques.filter(c => c.moneda === 'USD').reduce((s, c) => s + c.monto, 0);
+
+  const columns = opts.isConstancia
+    ? ['N° Cheque', 'Banco', 'Monto', 'Vto.', 'Librador', 'CUIT Librador', 'Endosado por', 'Estado', 'Obs.']
+    : ['N° Cheque', 'Banco', 'Monto', 'Emisión', 'Vto.', 'Tipo', 'Librador', 'Recibido de', 'Entregado a', 'Endosado por', 'Estado'];
+
+  const rows = cheques.map((c) =>
+    opts.isConstancia
+      ? [c.numero, c.banco, $$(c.monto, c.moneda), fmtDate(c.fechaVencimiento),
+         c.librador, c.cuitLibrador || '-', c.endosado ? (c.endosadoPor || 'Sí') : 'No',
+         estadoLabel[c.estado], c.observaciones || '-']
+      : [c.numero, c.banco, $$(c.monto, c.moneda), fmtDate(c.fechaEmision), fmtDate(c.fechaVencimiento),
+         c.tipo === 'al_dia' ? 'Al día' : 'Diferido', c.librador, c.recibidoDe,
+         c.entregadoA || '-', c.endosado ? (c.endosadoPor || 'Sí') : 'No', estadoLabel[c.estado]]
+  );
 
   autoTable(doc, {
-    startY: 28,
-    head: [['N° Cheque', 'Banco', 'Monto', 'Vencimiento', 'Tipo', 'Librador', 'Recibido de', 'Entregado a', 'Portador', 'Endosado', 'Estado', 'Obs.']],
-    body: cheques.map((c) => [
-      c.numero,
-      c.banco,
-      $$(c.monto, c.moneda),
-      fmtDate(c.fechaVencimiento),
-      c.tipo === 'al_dia' ? 'Al día' : 'Diferido',
-      c.librador,
-      c.recibidoDe,
-      c.entregadoA || '-',
-      c.alPortador ? 'Sí' : 'No',
-      c.endosado ? 'Sí' : 'No',
-      estadoLabel[c.estado],
-      c.observaciones || '-',
-    ]),
+    startY,
+    head: [columns],
+    body: rows,
     styles: { fontSize: 7.5 },
     headStyles: { fillColor: navy },
     alternateRowStyles: { fillColor: [248, 249, 250] },
     margin: { left: 10, right: 10 },
   });
 
-  doc.save(`cheques-${new Date().toLocaleDateString('es-AR').replace(/\//g, '-')}.pdf`);
+  // Footer totals
+  const finalY = (doc as any).lastAutoTable.finalY + 6;
+  doc.setFontSize(9);
+  doc.setTextColor(60, 60, 60);
+  doc.setFont('helvetica', 'bold');
+  let footerText = `Total: ${cheques.length} cheque${cheques.length !== 1 ? 's' : ''}`;
+  if (totalARS > 0) footerText += `   |   Total ARS: ${$$(totalARS)}`;
+  if (totalUSD > 0) footerText += `   |   Total USD: ${$$(totalUSD, 'USD')}`;
+  doc.text(footerText, 14, finalY);
+
+  if (opts.isConstancia) {
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(150, 150, 150);
+    doc.text('Maja Automotores — Documento generado automáticamente', 14, finalY + 7);
+  }
+
+  const filename = opts.isConstancia
+    ? `constancia-cheques-${today.replace(/\//g, '-')}.pdf`
+    : `cheques-${today.replace(/\//g, '-')}.pdf`;
+
+  doc.save(filename);
 }
 
 function exportExcel(cheques: Cheque[]) {
@@ -279,6 +332,7 @@ function exportExcel(cheques: Cheque[]) {
     'Tipo': c.tipo === 'al_dia' ? 'Al día' : 'Diferido',
     'Al portador': c.alPortador ? 'Sí' : 'No',
     'Endosado': c.endosado ? 'Sí' : 'No',
+    'Endosado por': c.endosadoPor,
     'Librador': c.librador,
     'CUIT Librador': c.cuitLibrador,
     'Recibido de': c.recibidoDe,
@@ -297,9 +351,16 @@ export function Cheques() {
   const [cheques, setCheques] = useState<Cheque[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ open: boolean; editing: Cheque | null }>({ open: false, editing: null });
-  const [filtroEstado, setFiltroEstado] = useState<string>('');
-  const [filtroTipo, setFiltroTipo] = useState<string>('');
+
+  // Filters
   const [search, setSearch] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('');
+  const [filtroTipo, setFiltroTipo] = useState('');
+  const [filtroMoneda, setFiltroMoneda] = useState('');
+  const [filtroRecibidoDe, setFiltroRecibidoDe] = useState('');
+  const [filtroLibrador, setFiltroLibrador] = useState('');
+  const [filtroDesde, setFiltroDesde] = useState('');
+  const [filtroHasta, setFiltroHasta] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -339,10 +400,21 @@ export function Cheques() {
     setCheques((p) => p.filter((c) => c.id !== id));
   }
 
-  // Filters
+  function clearFilters() {
+    setSearch(''); setFiltroEstado(''); setFiltroTipo(''); setFiltroMoneda('');
+    setFiltroRecibidoDe(''); setFiltroLibrador(''); setFiltroDesde(''); setFiltroHasta('');
+  }
+
+  const hasFilters = search || filtroEstado || filtroTipo || filtroMoneda || filtroRecibidoDe || filtroLibrador || filtroDesde || filtroHasta;
+
   const filtered = cheques.filter((c) => {
     if (filtroEstado && c.estado !== filtroEstado) return false;
     if (filtroTipo && c.tipo !== filtroTipo) return false;
+    if (filtroMoneda && c.moneda !== filtroMoneda) return false;
+    if (filtroRecibidoDe && c.recibidoDe !== filtroRecibidoDe) return false;
+    if (filtroLibrador && c.librador !== filtroLibrador) return false;
+    if (filtroDesde && c.fechaVencimiento < filtroDesde) return false;
+    if (filtroHasta && c.fechaVencimiento > filtroHasta) return false;
     if (search) {
       const q = search.toLowerCase();
       return (
@@ -350,7 +422,8 @@ export function Cheques() {
         c.banco.toLowerCase().includes(q) ||
         c.librador.toLowerCase().includes(q) ||
         c.recibidoDe.toLowerCase().includes(q) ||
-        c.entregadoA.toLowerCase().includes(q)
+        c.entregadoA.toLowerCase().includes(q) ||
+        c.endosadoPor.toLowerCase().includes(q)
       );
     }
     return true;
@@ -358,15 +431,29 @@ export function Cheques() {
 
   // Summary stats
   const enCartera = cheques.filter((c) => c.estado === 'en_cartera');
-  const proxVencer = cheques.filter((c) => {
-    const a = vencimientoAlert(c);
-    return a === 'proximo';
-  });
+  const proxVencer = cheques.filter((c) => vencimientoAlert(c) === 'proximo');
   const vencidos = cheques.filter((c) => vencimientoAlert(c) === 'vencido');
   const totalCarteraARS = enCartera.filter(c => c.moneda === 'ARS').reduce((s, c) => s + c.monto, 0);
   const totalCarteraUSD = enCartera.filter(c => c.moneda === 'USD').reduce((s, c) => s + c.monto, 0);
 
+  // Unique values for dropdowns
+  const optsRecibidoDe = unique(cheques.map(c => c.recibidoDe));
+  const optsLibrador = unique(cheques.map(c => c.librador));
+
   const selCls = 'border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white';
+
+  function handleExportPDF() {
+    const isConstancia = !!filtroRecibidoDe;
+    exportPDF(filtered, {
+      title: isConstancia
+        ? 'Constancia de Cheques — Maja Automotores'
+        : 'Planilla de Cheques — Maja Automotores',
+      subtitle: isConstancia
+        ? `Cheques recibidos de: ${filtroRecibidoDe}${filtroEstado ? '  |  Estado: ' + estadoLabel[filtroEstado as Estado] : ''}${filtroDesde || filtroHasta ? `  |  Vto.: ${filtroDesde ? fmtDate(filtroDesde) : ''}${filtroHasta ? ' al ' + fmtDate(filtroHasta) : ''}` : ''}`
+        : undefined,
+      isConstancia,
+    });
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -409,37 +496,73 @@ export function Cheques() {
         </div>
       </div>
 
-      {/* Filters + export */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <input
-          className={selCls + ' min-w-[180px]'}
-          placeholder="Buscar número, banco, librador..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-        <select className={selCls} value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
-          <option value="">Todos los estados</option>
-          <option value="en_cartera">En cartera</option>
-          <option value="depositado">Depositado</option>
-          <option value="entregado">Entregado</option>
-          <option value="cobrado">Cobrado</option>
-          <option value="rechazado">Rechazado</option>
-        </select>
-        <select className={selCls} value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
-          <option value="">Todos los tipos</option>
-          <option value="al_dia">Al día</option>
-          <option value="diferido">Diferido</option>
-        </select>
-        <div className="flex gap-2 ml-auto">
-          <button onClick={() => exportPDF(filtered)} disabled={filtered.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors">
-            <FileDown size={15} /> PDF
-          </button>
-          <button onClick={() => exportExcel(filtered)} disabled={filtered.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors">
-            <TableIcon size={15} /> Excel
-          </button>
+      {/* Filters */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+        <div className="flex flex-wrap gap-3 items-center">
+          <input
+            className={selCls + ' min-w-[200px]'}
+            placeholder="Buscar número, banco, librador..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          <select className={selCls} value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
+            <option value="">Todos los estados</option>
+            <option value="en_cartera">En cartera</option>
+            <option value="depositado">Depositado</option>
+            <option value="entregado">Entregado</option>
+            <option value="cobrado">Cobrado</option>
+            <option value="rechazado">Rechazado</option>
+          </select>
+          <select className={selCls} value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
+            <option value="">Al día + Diferido</option>
+            <option value="al_dia">Al día</option>
+            <option value="diferido">Diferido</option>
+          </select>
+          <select className={selCls} value={filtroMoneda} onChange={e => setFiltroMoneda(e.target.value)}>
+            <option value="">ARS + USD</option>
+            <option value="ARS">Solo Pesos</option>
+            <option value="USD">Solo Dólares</option>
+          </select>
         </div>
+        <div className="flex flex-wrap gap-3 items-center">
+          <select className={selCls + ' min-w-[180px]'} value={filtroRecibidoDe} onChange={e => setFiltroRecibidoDe(e.target.value)}>
+            <option value="">Recibido de: todos</option>
+            {optsRecibidoDe.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+          <select className={selCls + ' min-w-[180px]'} value={filtroLibrador} onChange={e => setFiltroLibrador(e.target.value)}>
+            <option value="">Librador: todos</option>
+            {optsLibrador.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 whitespace-nowrap">Vto. desde</span>
+            <input type="date" className={selCls} value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)} />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">hasta</span>
+            <input type="date" className={selCls} value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)} />
+          </div>
+          {hasFilters && (
+            <button onClick={clearFilters} className="text-xs text-gray-400 hover:text-red-500 transition-colors underline">
+              Limpiar filtros
+            </button>
+          )}
+          <div className="flex gap-2 ml-auto">
+            <button onClick={handleExportPDF} disabled={filtered.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors">
+              <FileDown size={15} />
+              {filtroRecibidoDe ? 'Constancia PDF' : 'PDF'}
+            </button>
+            <button onClick={() => exportExcel(filtered)} disabled={filtered.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors">
+              <TableIcon size={15} /> Excel
+            </button>
+          </div>
+        </div>
+        {filtroRecibidoDe && (
+          <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-1.5">
+            El PDF se generará como <strong>constancia</strong> para <strong>{filtroRecibidoDe}</strong> con los {filtered.length} cheque{filtered.length !== 1 ? 's' : ''} filtrados.
+          </p>
+        )}
       </div>
 
       {/* Table */}
@@ -456,7 +579,7 @@ export function Cheques() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ backgroundColor: '#262e63' }}>
-                  {['N° Cheque', 'Banco', 'Monto', 'Vencimiento', 'Tipo', 'Librador', 'Recibido de', 'Entregado a', 'Tags', 'Estado', ''].map((h) => (
+                  {['N° Cheque', 'Banco', 'Monto', 'Emisión', 'Vencimiento', 'Tipo', 'Librador', 'Endosado por', 'Recibido de', 'Entregado a', 'Estado', ''].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-white font-medium text-xs whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -470,6 +593,7 @@ export function Cheques() {
                       <td className="px-4 py-3 font-mono font-medium text-gray-900">{c.numero}</td>
                       <td className="px-4 py-3 text-gray-700">{c.banco}</td>
                       <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{$$(c.monto, c.moneda)}</td>
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{fmtDate(c.fechaEmision)}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           {alert === 'vencido' && <AlertTriangle size={13} className="text-red-500 flex-shrink-0" />}
@@ -478,23 +602,22 @@ export function Cheques() {
                             {fmtDate(c.fechaVencimiento)}
                           </span>
                         </div>
-                        {alert === 'vencido' && <p className="text-xs text-red-400 mt-0.5">Vencido hace {Math.abs(days!)} días</p>}
-                        {alert === 'proximo' && <p className="text-xs text-amber-400 mt-0.5">Vence en {days} días</p>}
+                        {alert === 'vencido' && <p className="text-xs text-red-400 mt-0.5">Hace {Math.abs(days!)} días</p>}
+                        {alert === 'proximo' && <p className="text-xs text-amber-400 mt-0.5">En {days} días</p>}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${c.tipo === 'diferido' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
                           {c.tipo === 'al_dia' ? 'Al día' : 'Diferido'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-700 max-w-[140px] truncate">{c.librador || '-'}</td>
-                      <td className="px-4 py-3 text-gray-700 max-w-[140px] truncate">{c.recibidoDe || '-'}</td>
-                      <td className="px-4 py-3 text-gray-500 max-w-[140px] truncate">{c.entregadoA || '-'}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1 flex-wrap">
-                          {c.alPortador && <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-xs rounded">Portador</span>}
-                          {c.endosado && <span className="px-1.5 py-0.5 bg-teal-100 text-teal-700 text-xs rounded">Endosado</span>}
-                        </div>
+                      <td className="px-4 py-3 text-gray-700 max-w-[130px] truncate">{c.librador || '-'}</td>
+                      <td className="px-4 py-3 text-gray-500 max-w-[120px] truncate text-xs">
+                        {c.endosado
+                          ? <span className="text-teal-700">{c.endosadoPor || 'Sí'}</span>
+                          : <span className="text-gray-300">—</span>}
                       </td>
+                      <td className="px-4 py-3 text-gray-700 max-w-[130px] truncate">{c.recibidoDe || '-'}</td>
+                      <td className="px-4 py-3 text-gray-500 max-w-[120px] truncate">{c.entregadoA || '-'}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${estadoColor[c.estado]}`}>
                           {estadoLabel[c.estado]}
@@ -518,9 +641,19 @@ export function Cheques() {
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">
-            {filtered.length} cheque{filtered.length !== 1 ? 's' : ''}
-            {filtroEstado || filtroTipo || search ? ` (filtrado de ${cheques.length} total)` : ''}
+          <div className="px-4 py-3 border-t border-gray-100 text-xs text-gray-400 flex items-center justify-between">
+            <span>
+              {filtered.length} cheque{filtered.length !== 1 ? 's' : ''}
+              {hasFilters ? ` (filtrado de ${cheques.length} total)` : ''}
+            </span>
+            <span>
+              {filtered.filter(c => c.moneda === 'ARS').length > 0 && (
+                <span>ARS: {$$(filtered.filter(c => c.moneda === 'ARS').reduce((s, c) => s + c.monto, 0))}</span>
+              )}
+              {filtered.filter(c => c.moneda === 'USD').length > 0 && (
+                <span className="ml-4">USD: {$$(filtered.filter(c => c.moneda === 'USD').reduce((s, c) => s + c.monto, 0), 'USD')}</span>
+              )}
+            </span>
           </div>
         </div>
       )}
