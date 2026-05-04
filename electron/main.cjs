@@ -1,10 +1,31 @@
 'use strict';
 
 const { app, BrowserWindow, shell, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { pathToFileURL } = require('url');
+
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.logger = null;
+
+autoUpdater.on('update-downloaded', (info) => {
+  dialog.showMessageBox({
+    type: 'info',
+    title: 'Actualización lista',
+    message: `Versión ${info.version} descargada. ¿Reiniciar para instalar?`,
+    buttons: ['Reiniciar ahora', 'Más tarde'],
+    defaultId: 0,
+  }).then(({ response }) => {
+    if (response === 0) autoUpdater.quitAndInstall();
+  });
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('[updater]', err.message);
+});
 
 const PORT = 3001;
 let mainWindow = null;
@@ -108,6 +129,9 @@ async function createWindow() {
         message: 'Se creó automáticamente tu cuenta de administrador:\n\nEmail:      admin@maja.com\nContraseña: Maja2024!\n\nCambiá la contraseña desde Usuarios después de iniciar sesión.',
         buttons: ['Entendido'],
       });
+    }
+    if (app.isPackaged) {
+      setTimeout(() => autoUpdater.checkForUpdates(), 3000);
     }
   });
 }

@@ -35,3 +35,9 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Maja Automotores
+
+publish:
+  provider: github
+  owner: abonvecchi1-debug
+  repo: maja-automotores
+  releaseType: release

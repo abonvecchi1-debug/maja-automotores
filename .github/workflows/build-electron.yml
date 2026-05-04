@@ -3,6 +3,9 @@ name: Build Desktop App (Windows)
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -27,14 +30,7 @@ jobs:
       - name: Build React frontend
         run: npm run build
 
-      - name: Build Electron installer
-        run: npx electron-builder --win
+      - name: Build and publish Electron installer
+        run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: maja-automotores-windows
-          path: release/*.exe
-          retention-days: 30
