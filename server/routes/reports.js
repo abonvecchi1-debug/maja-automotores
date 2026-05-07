@@ -48,25 +48,44 @@ router.get('/balance', authenticateToken, requireAdmin, (req, res) => {
     ORDER BY month, due_date
   `).all(from, to);
 
+  // Egresos e ingresos registrados en Finanzas
+  const egresosFinanzas = db.prepare(`
+    SELECT id, description, date, amount, category
+    FROM transactions
+    WHERE type = 'egreso' AND date >= ? AND date <= ?
+    ORDER BY date
+  `).all(from, to);
+
+  const ingresosFinanzas = db.prepare(`
+    SELECT id, description, date, amount, category
+    FROM transactions
+    WHERE type = 'ingreso' AND date >= ? AND date <= ?
+    ORDER BY date
+  `).all(from, to);
+
   // Totales
   const totalVentas = ventas.reduce((s, v) => s + (v.sale_price || 0), 0);
+  const totalIngresosFinanzas = ingresosFinanzas.reduce((s, t) => s + (t.amount || 0), 0);
   const totalCostoVendidos = ventas.reduce((s, v) => s + (v.purchase_price || 0), 0);
-  const utilidadBruta = totalVentas - totalCostoVendidos;
+  const utilidadBruta = totalVentas + totalIngresosFinanzas - totalCostoVendidos;
   const totalGastos = gastos.reduce((s, g) => s + (g.amount || 0), 0);
   const totalGastosFijos = gastosFijos.reduce((s, g) => s + (g.amount || 0), 0);
+  const totalEgresosFinanzas = egresosFinanzas.reduce((s, t) => s + (t.amount || 0), 0);
   const totalCompras = compras.reduce((s, c) => s + (c.purchase_price || 0), 0);
-  const utilidadNeta = utilidadBruta - totalGastos - totalGastosFijos;
+  const utilidadNeta = utilidadBruta - totalGastos - totalGastosFijos - totalEgresosFinanzas;
 
   res.json({
     periodo: { from, to },
     resumen: {
       total_ventas: totalVentas,
+      total_ingresos_finanzas: totalIngresosFinanzas,
       cantidad_ventas: ventas.length,
       costo_vehiculos_vendidos: totalCostoVendidos,
       utilidad_bruta: utilidadBruta,
       total_gastos_variables: totalGastos,
       total_gastos_fijos: totalGastosFijos,
-      total_gastos: totalGastos + totalGastosFijos,
+      total_egresos_finanzas: totalEgresosFinanzas,
+      total_gastos: totalGastos + totalGastosFijos + totalEgresosFinanzas,
       utilidad_neta: utilidadNeta,
       total_compras: totalCompras,
       cantidad_compras: compras.length,
@@ -75,6 +94,8 @@ router.get('/balance', authenticateToken, requireAdmin, (req, res) => {
     compras,
     gastos,
     gastos_fijos: gastosFijos,
+    egresos_finanzas: egresosFinanzas,
+    ingresos_finanzas: ingresosFinanzas,
   });
 });
 
