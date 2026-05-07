@@ -9,7 +9,7 @@ import { formatCurrency, formatCurrencyShort, formatDate, statusLabel, statusCol
 export function Dashboard() {
   const {
     vehicles, clients, sales, installmentPayments,
-    expenses, fixedExpenseRecords, tasks, suppliers, settings, transactions,
+    expenses, fixedExpenseRecords, tasks, suppliers, settings, transactions, taxPayments,
   } = useStore();
 
   const today = new Date().toISOString().split('T')[0];
@@ -38,6 +38,9 @@ export function Dashboard() {
         .reduce((acc, r) => acc + r.amount, 0)
     + transactions
         .filter((t) => t.type === 'egreso' && t.date.startsWith(thisMonth))
+        .reduce((acc, t) => acc + t.amount, 0)
+    + taxPayments
+        .filter((t) => t.paid && t.paidDate?.startsWith(thisMonth))
         .reduce((acc, t) => acc + t.amount, 0);
 
   const monthIIBB = (soldThisMonth.reduce((acc, v) => acc + (v.soldPrice ?? 0), 0)) * (settings.iibbRate / 100);
@@ -79,6 +82,9 @@ export function Dashboard() {
           .reduce((acc, r) => acc + r.amount, 0)
       + transactions
           .filter((t) => t.type === 'egreso' && t.date.startsWith(m))
+          .reduce((acc, t) => acc + t.amount, 0)
+      + taxPayments
+          .filter((t) => t.paid && t.paidDate?.startsWith(m))
           .reduce((acc, t) => acc + t.amount, 0);
     const ingresosTx = transactions
       .filter((t) => t.type === 'ingreso' && t.date.startsWith(m))
@@ -351,9 +357,11 @@ export function Dashboard() {
           impuesto: 'Impuesto', otro: 'Otro',
           compra_vehiculo: 'Compra vehículo', gasto_vehiculo: 'Gasto preparación',
           gasto_fijo: 'Gasto fijo', proveedor: 'Proveedor', otro_egreso: 'Otro egreso',
+          iibb: 'IIBB', monotributo: 'Monotributo', responsable_inscripto: 'Resp. Inscripto',
+          autonomos: 'Autónomos', ganancias: 'Ganancias',
         };
 
-        type EgresoItem = { key: string; description: string; category: string; amount: number; date: string; source: 'finanzas' | 'gasto' };
+        type EgresoItem = { key: string; description: string; category: string; amount: number; date: string; source: 'finanzas' | 'gasto' | 'impuesto' };
 
         const fromExpenses: EgresoItem[] = expenses
           .filter((e) => e.date.startsWith(thisMonth))
@@ -363,7 +371,11 @@ export function Dashboard() {
           .filter((t) => t.type === 'egreso' && t.date.startsWith(thisMonth))
           .map((t) => ({ key: `t-${t.id}`, description: t.description, category: t.category, amount: t.amount, date: t.date, source: 'finanzas' as const }));
 
-        const allEgresos = [...fromExpenses, ...fromTransactions].sort((a, b) => b.date.localeCompare(a.date));
+        const fromTaxPayments: EgresoItem[] = taxPayments
+          .filter((t) => t.paid && t.paidDate?.startsWith(thisMonth))
+          .map((t) => ({ key: `tp-${t.id}`, description: t.description, category: t.type, amount: t.amount, date: t.paidDate!, source: 'impuesto' as const }));
+
+        const allEgresos = [...fromExpenses, ...fromTransactions, ...fromTaxPayments].sort((a, b) => b.date.localeCompare(a.date));
         const total = allEgresos.reduce((a, e) => a + e.amount, 0);
 
         return (

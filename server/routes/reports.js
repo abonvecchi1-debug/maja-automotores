@@ -63,6 +63,14 @@ router.get('/balance', authenticateToken, requireAdmin, (req, res) => {
     ORDER BY date
   `).all(from, to);
 
+  // Impuestos pagados en el período
+  const impuestosPagados = db.prepare(`
+    SELECT id, type, description, month, amount, paid_date
+    FROM tax_payments
+    WHERE paid = 1 AND paid_date >= ? AND paid_date <= ?
+    ORDER BY paid_date
+  `).all(from, to);
+
   // Totales
   const totalVentas = ventas.reduce((s, v) => s + (v.sale_price || 0), 0);
   const totalIngresosFinanzas = ingresosFinanzas.reduce((s, t) => s + (t.amount || 0), 0);
@@ -71,8 +79,9 @@ router.get('/balance', authenticateToken, requireAdmin, (req, res) => {
   const totalGastos = gastos.reduce((s, g) => s + (g.amount || 0), 0);
   const totalGastosFijos = gastosFijos.reduce((s, g) => s + (g.amount || 0), 0);
   const totalEgresosFinanzas = egresosFinanzas.reduce((s, t) => s + (t.amount || 0), 0);
+  const totalImpuestos = impuestosPagados.reduce((s, t) => s + (t.amount || 0), 0);
   const totalCompras = compras.reduce((s, c) => s + (c.purchase_price || 0), 0);
-  const utilidadNeta = utilidadBruta - totalGastos - totalGastosFijos - totalEgresosFinanzas;
+  const utilidadNeta = utilidadBruta - totalGastos - totalGastosFijos - totalEgresosFinanzas - totalImpuestos;
 
   res.json({
     periodo: { from, to },
@@ -85,7 +94,8 @@ router.get('/balance', authenticateToken, requireAdmin, (req, res) => {
       total_gastos_variables: totalGastos,
       total_gastos_fijos: totalGastosFijos,
       total_egresos_finanzas: totalEgresosFinanzas,
-      total_gastos: totalGastos + totalGastosFijos + totalEgresosFinanzas,
+      total_impuestos: totalImpuestos,
+      total_gastos: totalGastos + totalGastosFijos + totalEgresosFinanzas + totalImpuestos,
       utilidad_neta: utilidadNeta,
       total_compras: totalCompras,
       cantidad_compras: compras.length,
@@ -96,6 +106,7 @@ router.get('/balance', authenticateToken, requireAdmin, (req, res) => {
     gastos_fijos: gastosFijos,
     egresos_finanzas: egresosFinanzas,
     ingresos_finanzas: ingresosFinanzas,
+    impuestos_pagados: impuestosPagados,
   });
 });
 

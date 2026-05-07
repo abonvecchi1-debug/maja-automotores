@@ -16,6 +16,7 @@ interface Resumen {
   total_gastos_variables: number;
   total_gastos_fijos: number;
   total_egresos_finanzas: number;
+  total_impuestos: number;
   total_gastos: number;
   utilidad_neta: number;
   total_compras: number;
@@ -42,6 +43,9 @@ interface GastoFijo {
 interface Transaccion {
   id: string; description: string; date: string; amount: number; category: string;
 }
+interface ImpuestoPagado {
+  id: string; type: string; description: string; month: string; amount: number; paid_date: string;
+}
 
 interface BalanceData {
   periodo: { from: string; to: string };
@@ -52,6 +56,7 @@ interface BalanceData {
   gastos_fijos: GastoFijo[];
   egresos_finanzas: Transaccion[];
   ingresos_finanzas: Transaccion[];
+  impuestos_pagados: ImpuestoPagado[];
 }
 
 const ARS = (n: number) => '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -98,7 +103,7 @@ function SimpleTable({ headers, rows }: { headers: string[]; rows: (string | num
 }
 
 function exportPDF(data: BalanceData) {
-  const { periodo, resumen, ventas, compras, gastos, gastos_fijos, egresos_finanzas, ingresos_finanzas } = data;
+  const { periodo, resumen, ventas, compras, gastos, gastos_fijos, egresos_finanzas, ingresos_finanzas, impuestos_pagados } = data;
   const doc = new jsPDF();
   const NAVY = [38, 46, 99] as [number, number, number];
 
@@ -126,6 +131,7 @@ function exportPDF(data: BalanceData) {
       ['Gastos variables', ARS(resumen.total_gastos_variables)],
       ['Gastos fijos', ARS(resumen.total_gastos_fijos)],
       ...(resumen.total_egresos_finanzas > 0 ? [['Egresos (Finanzas)', ARS(resumen.total_egresos_finanzas)]] : []),
+      ...(resumen.total_impuestos > 0 ? [['Impuestos pagados', ARS(resumen.total_impuestos)]] : []),
       ['Total gastos', ARS(resumen.total_gastos)],
       ['UTILIDAD NETA', ARS(resumen.utilidad_neta)],
     ],
@@ -133,10 +139,18 @@ function exportPDF(data: BalanceData) {
     bodyStyles: { fontSize: 10 },
     columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
     didParseCell: (data) => {
-      if (data.row.index === 6) {
+      if (data.section === 'body' && data.cell.text[0] === 'UTILIDAD NETA') {
         data.cell.styles.fillColor = resumen.utilidad_neta >= 0 ? [220, 252, 231] : [254, 226, 226];
         data.cell.styles.textColor = resumen.utilidad_neta >= 0 ? [22, 101, 52] : [153, 27, 27];
         data.cell.styles.fontStyle = 'bold';
+      }
+      if (data.section === 'body' && data.cell.text[0] === ARS(resumen.utilidad_neta)) {
+        const isUtilRow = data.row.cells[0]?.text[0] === 'UTILIDAD NETA';
+        if (isUtilRow) {
+          data.cell.styles.fillColor = resumen.utilidad_neta >= 0 ? [220, 252, 231] : [254, 226, 226];
+          data.cell.styles.textColor = resumen.utilidad_neta >= 0 ? [22, 101, 52] : [153, 27, 27];
+          data.cell.styles.fontStyle = 'bold';
+        }
       }
     },
     margin: { left: 14, right: 14 },
@@ -178,11 +192,15 @@ function exportPDF(data: BalanceData) {
     addSection(`Ingresos de Finanzas (${ingresos_finanzas.length})`, ['Fecha', 'Descripción', 'Categoría', 'Monto'],
       ingresos_finanzas.map((t) => [t.date, t.description, t.category, ARS(t.amount)]));
 
+  if (impuestos_pagados.length > 0)
+    addSection(`Impuestos Pagados (${impuestos_pagados.length})`, ['Fecha pago', 'Descripción', 'Tipo', 'Monto'],
+      impuestos_pagados.map((t) => [t.paid_date, t.description, t.type, ARS(t.amount)]));
+
   doc.save(`balance-${periodo.from}-${periodo.to}.pdf`);
 }
 
 function exportExcel(data: BalanceData) {
-  const { periodo, resumen, ventas, compras, gastos, gastos_fijos, egresos_finanzas, ingresos_finanzas } = data;
+  const { periodo, resumen, ventas, compras, gastos, gastos_fijos, egresos_finanzas, ingresos_finanzas, impuestos_pagados } = data;
   const wb = XLSX.utils.book_new();
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
@@ -193,6 +211,7 @@ function exportExcel(data: BalanceData) {
     { 'Concepto': 'Gastos variables', 'Importe': resumen.total_gastos_variables },
     { 'Concepto': 'Gastos fijos', 'Importe': resumen.total_gastos_fijos },
     { 'Concepto': 'Egresos (Finanzas)', 'Importe': resumen.total_egresos_finanzas },
+    { 'Concepto': 'Impuestos pagados', 'Importe': resumen.total_impuestos },
     { 'Concepto': 'Total gastos', 'Importe': resumen.total_gastos },
     { 'Concepto': 'UTILIDAD NETA', 'Importe': resumen.utilidad_neta },
     { 'Concepto': '---', 'Importe': '' },
@@ -233,6 +252,11 @@ function exportExcel(data: BalanceData) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ingresos_finanzas.map((t) => ({
       'Fecha': t.date, 'Descripción': t.description, 'Categoría': t.category, 'Monto': t.amount,
     }))), 'Ingresos Finanzas');
+
+  if (impuestos_pagados.length > 0)
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(impuestos_pagados.map((t) => ({
+      'Fecha pago': t.paid_date, 'Descripción': t.description, 'Tipo': t.type, 'Monto': t.amount,
+    }))), 'Impuestos');
 
   XLSX.writeFile(wb, `balance-${periodo.from}-${periodo.to}.xlsx`);
 }
@@ -340,6 +364,7 @@ export function Reports() {
                 { label: '(-) Gastos variables', val: -r.total_gastos_variables, bold: false, positive: false },
                 { label: '(-) Gastos fijos', val: -r.total_gastos_fijos, bold: false, positive: false },
                 ...(r.total_egresos_finanzas > 0 ? [{ label: '(-) Egresos (Finanzas)', val: -r.total_egresos_finanzas, bold: false, positive: false }] : []),
+                ...(r.total_impuestos > 0 ? [{ label: '(-) Impuestos pagados', val: -r.total_impuestos, bold: false, positive: false }] : []),
                 { label: 'UTILIDAD NETA', val: r.utilidad_neta, bold: true, positive: r.utilidad_neta >= 0 },
               ].map((row, i, arr) => (
                 <div key={i} className={`flex justify-between py-1.5 ${(row.label === 'Utilidad bruta' || row.label === 'UTILIDAD NETA') ? 'border-t border-gray-200 mt-1 pt-2' : ''}`}>
@@ -401,6 +426,13 @@ export function Reports() {
               />
             </Section>
           )}
+
+          <Section title={`Impuestos pagados (${data.impuestos_pagados.length})`}>
+            <SimpleTable
+              headers={['Fecha pago', 'Descripción', 'Tipo', 'Monto']}
+              rows={data.impuestos_pagados.map((t) => [t.paid_date, t.description, t.type, ARS(t.amount)])}
+            />
+          </Section>
         </div>
       )}
     </div>
