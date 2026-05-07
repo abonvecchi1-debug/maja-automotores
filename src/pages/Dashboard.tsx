@@ -9,7 +9,7 @@ import { formatCurrency, formatCurrencyShort, formatDate, statusLabel, statusCol
 export function Dashboard() {
   const {
     vehicles, clients, sales, installmentPayments,
-    expenses, fixedExpenseRecords, tasks, suppliers, settings,
+    expenses, fixedExpenseRecords, tasks, suppliers, settings, transactions,
   } = useStore();
 
   const today = new Date().toISOString().split('T')[0];
@@ -25,14 +25,20 @@ export function Dashboard() {
   const monthRevenue = soldThisMonth.reduce((acc, v) => acc + (v.soldPrice ?? 0), 0)
     + installmentPayments
         .filter((p) => p.paid && p.paidDate?.startsWith(thisMonth))
-        .reduce((acc, p) => acc + p.amount, 0);
+        .reduce((acc, p) => acc + p.amount, 0)
+    + transactions
+        .filter((t) => t.type === 'ingreso' && t.date.startsWith(thisMonth))
+        .reduce((acc, t) => acc + t.amount, 0);
 
   const monthExpenses = expenses
     .filter((e) => e.date.startsWith(thisMonth))
     .reduce((acc, e) => acc + e.amount, 0)
     + fixedExpenseRecords
         .filter((r) => r.month === thisMonth)
-        .reduce((acc, r) => acc + r.amount, 0);
+        .reduce((acc, r) => acc + r.amount, 0)
+    + transactions
+        .filter((t) => t.type === 'egreso' && t.date.startsWith(thisMonth))
+        .reduce((acc, t) => acc + t.amount, 0);
 
   const monthIIBB = (soldThisMonth.reduce((acc, v) => acc + (v.soldPrice ?? 0), 0)) * (settings.iibbRate / 100);
   const monthProfit = monthRevenue - monthExpenses - monthIIBB;
@@ -70,8 +76,14 @@ export function Dashboard() {
       .reduce((acc, e) => acc + e.amount, 0)
       + fixedExpenseRecords
           .filter((r) => r.month === m)
-          .reduce((acc, r) => acc + r.amount, 0);
-    return { mes: monthLabel, ingresos: Math.round(ingresos / 1000), gastos: Math.round(gastos / 1000) };
+          .reduce((acc, r) => acc + r.amount, 0)
+      + transactions
+          .filter((t) => t.type === 'egreso' && t.date.startsWith(m))
+          .reduce((acc, t) => acc + t.amount, 0);
+    const ingresosTx = transactions
+      .filter((t) => t.type === 'ingreso' && t.date.startsWith(m))
+      .reduce((acc, t) => acc + t.amount, 0);
+    return { mes: monthLabel, ingresos: Math.round((ingresos + ingresosTx) / 1000), gastos: Math.round(gastos / 1000) };
   });
 
   // Stock por antigüedad
@@ -331,37 +343,46 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* Egresos variables del mes */}
+      {/* Egresos del mes (expenses variables + transacciones egreso) */}
       {(() => {
-        const monthVarExpenses = expenses.filter((e) => e.date.startsWith(thisMonth));
-        const totalVar = monthVarExpenses.reduce((a, e) => a + e.amount, 0);
-        const paidVar = monthVarExpenses.filter((e) => e.paid).reduce((a, e) => a + e.amount, 0);
-        const pendingVar = totalVar - paidVar;
         const categoryLabels: Record<string, string> = {
           mecanica: 'Mecánica', lavado: 'Lavado', pintura: 'Pintura', documentacion: 'Documentación',
           comision: 'Comisión', publicidad: 'Publicidad', combustible: 'Combustible',
           impuesto: 'Impuesto', otro: 'Otro',
+          compra_vehiculo: 'Compra vehículo', gasto_vehiculo: 'Gasto preparación',
+          gasto_fijo: 'Gasto fijo', proveedor: 'Proveedor', otro_egreso: 'Otro egreso',
         };
+
+        type EgresoItem = { key: string; description: string; category: string; amount: number; date: string; source: 'finanzas' | 'gasto' };
+
+        const fromExpenses: EgresoItem[] = expenses
+          .filter((e) => e.date.startsWith(thisMonth))
+          .map((e) => ({ key: `e-${e.id}`, description: e.description, category: e.category, amount: e.amount, date: e.date, source: 'gasto' as const }));
+
+        const fromTransactions: EgresoItem[] = transactions
+          .filter((t) => t.type === 'egreso' && t.date.startsWith(thisMonth))
+          .map((t) => ({ key: `t-${t.id}`, description: t.description, category: t.category, amount: t.amount, date: t.date, source: 'finanzas' as const }));
+
+        const allEgresos = [...fromExpenses, ...fromTransactions].sort((a, b) => b.date.localeCompare(a.date));
+        const total = allEgresos.reduce((a, e) => a + e.amount, 0);
+
         return (
           <Card padding={false}>
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-base font-semibold text-slate-900">Egresos del mes</h3>
               <div className="flex items-center gap-4">
                 <span className="text-sm text-slate-500">
-                  Pagado: <span className="text-green-600 font-medium">{formatCurrency(paidVar)}</span>
+                  Total: <span className="text-red-600 font-medium">{formatCurrency(total)}</span>
                 </span>
-                <span className="text-sm text-slate-500">
-                  Pendiente: <span className="text-red-600 font-medium">{formatCurrency(pendingVar)}</span>
-                </span>
-                <button onClick={() => navigate('/finanzas')} className="text-xs text-brand-600 hover:underline">Ver todos</button>
+                <button onClick={() => navigate('/finanzas')} className="text-xs text-brand-600 hover:underline">Ver finanzas</button>
               </div>
             </div>
             <div className="divide-y divide-slate-100">
-              {monthVarExpenses.length === 0 && (
+              {allEgresos.length === 0 && (
                 <p className="px-6 py-6 text-sm text-slate-400 text-center">No hay egresos registrados para este mes.</p>
               )}
-              {monthVarExpenses.slice(0, 6).map((e) => (
-                <div key={e.id} className="px-6 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors">
+              {allEgresos.slice(0, 6).map((e) => (
+                <div key={e.key} className="px-6 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors">
                   <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
                     <Receipt size={14} className="text-red-400" />
                   </div>
@@ -369,18 +390,13 @@ export function Dashboard() {
                     <p className="text-sm font-medium text-slate-900 truncate">{e.description}</p>
                     <p className="text-xs text-slate-500">{categoryLabels[e.category] ?? e.category} · {e.date}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-slate-900">{formatCurrency(e.amount)}</p>
-                    <p className={`text-xs ${e.paid ? 'text-green-600' : 'text-amber-600'}`}>
-                      {e.paid ? 'Pagado' : 'Pendiente'}
-                    </p>
-                  </div>
+                  <p className="text-sm font-semibold text-slate-900">{formatCurrency(e.amount)}</p>
                 </div>
               ))}
-              {monthVarExpenses.length > 6 && (
+              {allEgresos.length > 6 && (
                 <div className="px-6 py-3 text-center">
                   <button onClick={() => navigate('/finanzas')} className="text-xs text-brand-600 hover:underline">
-                    Ver {monthVarExpenses.length - 6} más →
+                    Ver {allEgresos.length - 6} más →
                   </button>
                 </div>
               )}
