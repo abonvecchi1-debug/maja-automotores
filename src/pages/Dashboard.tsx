@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
-import { Car, Users, AlertTriangle, CheckSquare, TrendingUp, TrendingDown, DollarSign, Clock } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { Car, AlertTriangle, CheckSquare, TrendingUp, TrendingDown, DollarSign, Clock, Receipt } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useStore } from '../store';
 import { StatCard, Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -65,7 +65,13 @@ export function Dashboard() {
     const ingresos = vehicles
       .filter((v) => v.status === 'vendido' && v.soldDate?.startsWith(m))
       .reduce((acc, v) => acc + (v.soldPrice ?? 0), 0);
-    return { mes: monthLabel, ingresos: Math.round(ingresos / 1000) };
+    const gastos = expenses
+      .filter((e) => e.date.startsWith(m))
+      .reduce((acc, e) => acc + e.amount, 0)
+      + fixedExpenseRecords
+          .filter((r) => r.month === m)
+          .reduce((acc, r) => acc + r.amount, 0);
+    return { mes: monthLabel, ingresos: Math.round(ingresos / 1000), gastos: Math.round(gastos / 1000) };
   });
 
   // Stock por antigüedad
@@ -164,8 +170,8 @@ export function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Sales chart */}
         <Card className="xl:col-span-2">
-          <h3 className="text-base font-semibold text-slate-900 mb-4">Ingresos por ventas (últimos 6 meses)</h3>
-          <div className="h-48">
+          <h3 className="text-base font-semibold text-slate-900 mb-4">Ingresos vs Gastos (últimos 6 meses)</h3>
+          <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <defs>
@@ -173,14 +179,20 @@ export function Dashboard() {
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                   </linearGradient>
+                  <linearGradient id="gradGastos" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                  </linearGradient>
                 </defs>
                 <XAxis dataKey="mes" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}K`} />
                 <Tooltip
-                  formatter={(v: number) => [`$${v.toLocaleString('es-AR')}K`, 'Ingresos']}
+                  formatter={(v: number, name: string) => [`$${v.toLocaleString('es-AR')}K`, name === 'ingresos' ? 'Ingresos' : 'Gastos']}
                   contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '13px' }}
                 />
+                <Legend formatter={(value) => value === 'ingresos' ? 'Ingresos' : 'Gastos'} wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
                 <Area type="monotone" dataKey="ingresos" stroke="#3b82f6" strokeWidth={2} fill="url(#gradIngresos)" />
+                <Area type="monotone" dataKey="gastos" stroke="#ef4444" strokeWidth={2} fill="url(#gradGastos)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -318,6 +330,64 @@ export function Dashboard() {
           </div>
         </Card>
       </div>
+
+      {/* Egresos variables del mes */}
+      {(() => {
+        const monthVarExpenses = expenses.filter((e) => e.date.startsWith(thisMonth));
+        const totalVar = monthVarExpenses.reduce((a, e) => a + e.amount, 0);
+        const paidVar = monthVarExpenses.filter((e) => e.paid).reduce((a, e) => a + e.amount, 0);
+        const pendingVar = totalVar - paidVar;
+        const categoryLabels: Record<string, string> = {
+          mecanica: 'Mecánica', lavado: 'Lavado', pintura: 'Pintura', documentacion: 'Documentación',
+          comision: 'Comisión', publicidad: 'Publicidad', combustible: 'Combustible',
+          impuesto: 'Impuesto', otro: 'Otro',
+        };
+        return (
+          <Card padding={false}>
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-slate-900">Egresos del mes</h3>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-slate-500">
+                  Pagado: <span className="text-green-600 font-medium">{formatCurrency(paidVar)}</span>
+                </span>
+                <span className="text-sm text-slate-500">
+                  Pendiente: <span className="text-red-600 font-medium">{formatCurrency(pendingVar)}</span>
+                </span>
+                <button onClick={() => navigate('/finanzas')} className="text-xs text-brand-600 hover:underline">Ver todos</button>
+              </div>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {monthVarExpenses.length === 0 && (
+                <p className="px-6 py-6 text-sm text-slate-400 text-center">No hay egresos registrados para este mes.</p>
+              )}
+              {monthVarExpenses.slice(0, 6).map((e) => (
+                <div key={e.id} className="px-6 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors">
+                  <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Receipt size={14} className="text-red-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-900 truncate">{e.description}</p>
+                    <p className="text-xs text-slate-500">{categoryLabels[e.category] ?? e.category} · {e.date}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-slate-900">{formatCurrency(e.amount)}</p>
+                    <p className={`text-xs ${e.paid ? 'text-green-600' : 'text-amber-600'}`}>
+                      {e.paid ? 'Pagado' : 'Pendiente'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {monthVarExpenses.length > 6 && (
+                <div className="px-6 py-3 text-center">
+                  <button onClick={() => navigate('/finanzas')} className="text-xs text-brand-600 hover:underline">
+                    Ver {monthVarExpenses.length - 6} más →
+                  </button>
+                </div>
+              )}
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* Gastos fijos del mes */}
       <Card padding={false}>
