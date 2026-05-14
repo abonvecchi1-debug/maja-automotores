@@ -23,9 +23,6 @@ export function Dashboard() {
   const soldThisMonth    = vehicles.filter((v) => v.status === 'vendido' && v.soldDate?.startsWith(thisMonth));
 
   const monthRevenue = soldThisMonth.reduce((acc, v) => acc + (v.soldPrice ?? 0), 0)
-    + installmentPayments
-        .filter((p) => p.paid && p.paidDate?.startsWith(thisMonth))
-        .reduce((acc, p) => acc + p.amount, 0)
     + transactions
         .filter((t) => t.type === 'ingreso' && t.date.startsWith(thisMonth))
         .reduce((acc, t) => acc + t.amount, 0);
@@ -45,7 +42,7 @@ export function Dashboard() {
     + soldThisMonth.reduce((acc, v) => acc + v.purchasePrice, 0);
 
   const monthIIBB = (soldThisMonth.reduce((acc, v) => acc + (v.soldPrice ?? 0), 0)) * (settings.iibbRate / 100);
-  const monthProfit = monthRevenue - monthExpenses - monthIIBB;
+  const monthProfit = monthRevenue - monthExpenses;
 
   // ── Alerts ────────────────────────────────────────────────────────────
 
