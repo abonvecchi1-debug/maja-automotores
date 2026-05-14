@@ -8,16 +8,21 @@ router.get('/balance', authenticateToken, requireAdmin, (req, res) => {
   const { from, to } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'Se requieren from y to' });
 
-  // Ventas del período
+  // Ventas del período — lee directo de vehicles para capturar ventas
+  // registradas desde el módulo Vehículos (sin registro en tabla sales)
   const ventas = db.prepare(`
-    SELECT s.id, s.sale_date, s.sale_price, s.payment_type,
+    SELECT v.id,
+           v.sold_date AS sale_date,
+           v.sold_price AS sale_price,
+           COALESCE(s.payment_type, 'contado') AS payment_type,
            v.brand, v.model, v.year, v.patent, v.purchase_price,
            c.first_name || ' ' || c.last_name AS client_name
-    FROM sales s
-    LEFT JOIN vehicles v ON v.id = s.vehicle_id
-    LEFT JOIN clients c ON c.id = s.client_id
-    WHERE s.sale_date >= ? AND s.sale_date <= ?
-    ORDER BY s.sale_date
+    FROM vehicles v
+    LEFT JOIN sales s ON s.id = v.sale_id
+    LEFT JOIN clients c ON c.id = COALESCE(s.client_id, v.sold_to_client_id)
+    WHERE v.status = 'vendido'
+      AND v.sold_date >= ? AND v.sold_date <= ?
+    ORDER BY v.sold_date
   `).all(from, to);
 
   // Vehículos comprados en el período

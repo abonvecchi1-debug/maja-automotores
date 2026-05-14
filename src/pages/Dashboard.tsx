@@ -41,7 +41,8 @@ export function Dashboard() {
         .reduce((acc, t) => acc + t.amount, 0)
     + taxPayments
         .filter((t) => t.paid && t.paidDate?.startsWith(thisMonth))
-        .reduce((acc, t) => acc + t.amount, 0);
+        .reduce((acc, t) => acc + t.amount, 0)
+    + soldThisMonth.reduce((acc, v) => acc + v.purchasePrice, 0);
 
   const monthIIBB = (soldThisMonth.reduce((acc, v) => acc + (v.soldPrice ?? 0), 0)) * (settings.iibbRate / 100);
   const monthProfit = monthRevenue - monthExpenses - monthIIBB;
@@ -85,7 +86,10 @@ export function Dashboard() {
           .reduce((acc, t) => acc + t.amount, 0)
       + taxPayments
           .filter((t) => t.paid && t.paidDate?.startsWith(m))
-          .reduce((acc, t) => acc + t.amount, 0);
+          .reduce((acc, t) => acc + t.amount, 0)
+      + vehicles
+          .filter((v) => v.status === 'vendido' && v.soldDate?.startsWith(m))
+          .reduce((acc, v) => acc + v.purchasePrice, 0);
     const ingresosTx = transactions
       .filter((t) => t.type === 'ingreso' && t.date.startsWith(m))
       .reduce((acc, t) => acc + t.amount, 0);
