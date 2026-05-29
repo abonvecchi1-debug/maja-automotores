@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import { Sidebar } from './Sidebar';
+import { BirthdayBanner } from './BirthdayBanner';
 import { useAuthStore } from '../store/authStore';
 
 export function Layout() {
@@ -27,6 +28,7 @@ export function Layout() {
           <span className="font-semibold text-slate-800 text-sm tracking-wide">Maja Automotores</span>
           <div className="w-8" />
         </header>
+        <BirthdayBanner />
         <main className="flex-1 overflow-y-auto">
           <Outlet />
         </main>

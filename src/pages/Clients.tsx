@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Users, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Plus, Search, ChevronRight, AlertTriangle, Cake } from 'lucide-react';
 import { useStore } from '../store';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -18,7 +18,7 @@ const PROVINCES = ['Buenos Aires', 'CABA', 'Catamarca', 'Chaco', 'Chubut', 'Cór
 
 const INITIAL_FORM = {
   firstName: '', lastName: '', dni: '', cuit: '', phone: '', email: '',
-  address: '', city: '', province: 'Buenos Aires', notes: '',
+  address: '', city: '', province: 'Buenos Aires', notes: '', birthDate: '',
 };
 
 export function Clients() {
@@ -30,6 +30,10 @@ export function Clients() {
   const [formError, setFormError] = useState('');
 
   const today = new Date().toISOString().split('T')[0];
+  const todayMMDD = today.slice(5); // MM-DD
+
+  const isBirthdayToday = (birthDate?: string) =>
+    !!birthDate && birthDate.slice(5) === todayMMDD;
 
   const filtered = clients.filter((c) =>
     search === '' ||
@@ -114,7 +118,14 @@ export function Clients() {
                           {c.firstName[0]}{c.lastName[0]}
                         </div>
                         <div>
-                          <p className="font-medium text-slate-900">{c.firstName} {c.lastName}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-medium text-slate-900">{c.firstName} {c.lastName}</p>
+                            {isBirthdayToday(c.birthDate) && (
+                              <span title="¡Hoy es su cumpleaños!">
+                                <Cake size={14} className="text-amber-500 flex-shrink-0" />
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-slate-500">DNI: {c.dni}</p>
                         </div>
                       </div>
@@ -183,6 +194,7 @@ export function Clients() {
           <Input label="DNI" value={form.dni} onChange={(e) => field('dni', e.target.value)} placeholder="28.456.789" />
           <Input label="CUIT (opcional)" value={form.cuit} onChange={(e) => field('cuit', e.target.value)} placeholder="20-28456789-3" />
           <Input label="Teléfono" value={form.phone} onChange={(e) => field('phone', e.target.value)} placeholder="11-4567-8901" />
+          <Input label="Fecha de nacimiento (opcional)" type="date" value={form.birthDate} onChange={(e) => field('birthDate', e.target.value)} />
           <div className="col-span-1 sm:col-span-2">
             <Input label="Email" type="email" value={form.email} onChange={(e) => field('email', e.target.value)} placeholder="cliente@email.com" />
           </div>

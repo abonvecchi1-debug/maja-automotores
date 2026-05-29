@@ -19,6 +19,7 @@ const map = (r) => ({
   city: r.city,
   province: r.province,
   notes: r.notes,
+  birthDate: r.birth_date ?? undefined,
   createdAt: r.created_at,
 });
 
@@ -31,10 +32,11 @@ router.post('/', (req, res) => {
   const id = randomUUID();
   const now = new Date().toISOString();
   db.prepare(`
-    INSERT INTO clients (id,first_name,last_name,dni,cuit,phone,phone2,email,address,city,province,notes,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    INSERT INTO clients (id,first_name,last_name,dni,cuit,phone,phone2,email,address,city,province,notes,birth_date,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(id, c.firstName, c.lastName, c.dni ?? '', c.cuit ?? null, c.phone ?? '', c.phone2 ?? null,
-    c.email ?? '', c.address ?? '', c.city ?? '', c.province ?? '', c.notes ?? '', now);
+    c.email ?? '', c.address ?? '', c.city ?? '', c.province ?? '', c.notes ?? '',
+    c.birthDate ?? null, now);
   res.status(201).json({ client: map(db.prepare('SELECT * FROM clients WHERE id = ?').get(id)) });
 });
 
@@ -44,14 +46,16 @@ router.put('/:id', (req, res) => {
   const ex = db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
   if (!ex) return res.status(404).json({ error: 'Cliente no encontrado' });
   db.prepare(`
-    UPDATE clients SET first_name=?,last_name=?,dni=?,cuit=?,phone=?,phone2=?,email=?,address=?,city=?,province=?,notes=?
+    UPDATE clients SET first_name=?,last_name=?,dni=?,cuit=?,phone=?,phone2=?,email=?,address=?,city=?,province=?,notes=?,birth_date=?
     WHERE id=?
   `).run(
     c.firstName ?? ex.first_name, c.lastName ?? ex.last_name, c.dni ?? ex.dni,
     c.cuit !== undefined ? (c.cuit || null) : ex.cuit,
     c.phone ?? ex.phone, c.phone2 !== undefined ? (c.phone2 || null) : ex.phone2,
     c.email ?? ex.email, c.address ?? ex.address, c.city ?? ex.city,
-    c.province ?? ex.province, c.notes ?? ex.notes, id
+    c.province ?? ex.province, c.notes ?? ex.notes,
+    c.birthDate !== undefined ? (c.birthDate || null) : ex.birth_date,
+    id
   );
   res.json({ client: map(db.prepare('SELECT * FROM clients WHERE id = ?').get(id)) });
 });

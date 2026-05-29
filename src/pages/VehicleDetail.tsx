@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, CheckSquare, Square, DollarSign, Wrench, Edit2, ImagePlus, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CheckSquare, Square, DollarSign, Wrench, Edit2, ImagePlus, X, UserPlus } from 'lucide-react';
 import { useStore } from '../store';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -51,8 +51,10 @@ export function VehicleDetail() {
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showSellModal, setShowSellModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAssignBuyerModal, setShowAssignBuyerModal] = useState(false);
+  const [assignBuyerId, setAssignBuyerId] = useState('');
   const [expenseForm, setExpenseForm] = useState(INITIAL_EXPENSE);
-  const [sellForm, setSellForm] = useState({ soldPrice: 0, soldDate: new Date().toISOString().split('T')[0] });
+  const [sellForm, setSellForm] = useState({ soldPrice: 0, soldDate: new Date().toISOString().split('T')[0], clientId: '' });
   const [editForm, setEditForm] = useState({
     brand: '', model: '', year: 0, km: 0,
     color: '', patent: '', purchasePrice: 0, publishPrice: 0,
@@ -98,8 +100,16 @@ export function VehicleDetail() {
       status: 'vendido',
       soldPrice: sellForm.soldPrice,
       soldDate: sellForm.soldDate,
+      ...(sellForm.clientId ? { soldToClientId: sellForm.clientId } : {}),
     });
     setShowSellModal(false);
+  };
+
+  const handleAssignBuyer = () => {
+    if (!assignBuyerId) return;
+    updateVehicle(id!, { soldToClientId: assignBuyerId });
+    setShowAssignBuyerModal(false);
+    setAssignBuyerId('');
   };
 
   const handleAddExpense = () => {
@@ -228,11 +238,22 @@ export function VehicleDetail() {
             );
           })}
         </div>
-        {buyer && (
-          <p className="text-xs text-green-700 mt-2 bg-green-50 px-3 py-1.5 rounded-lg">
-            Vendido a <button onClick={() => navigate(`/clientes/${buyer.id}`)} className="font-semibold underline">{buyer.firstName} {buyer.lastName}</button>
-            {vehicle.soldDate ? ` el ${formatDate(vehicle.soldDate)}` : ''}
-          </p>
+        {vehicle.status === 'vendido' && (
+          <div className="mt-2">
+            {buyer ? (
+              <p className="text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">
+                Vendido a <button onClick={() => navigate(`/clientes/${buyer.id}`)} className="font-semibold underline">{buyer.firstName} {buyer.lastName}</button>
+                {vehicle.soldDate ? ` el ${formatDate(vehicle.soldDate)}` : ''}
+              </p>
+            ) : (
+              <button
+                onClick={() => setShowAssignBuyerModal(true)}
+                className="flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <UserPlus size={13} /> Asignar comprador
+              </button>
+            )}
+          </div>
         )}
       </Card>
 
@@ -595,11 +616,44 @@ export function VehicleDetail() {
             label="Fecha de venta" type="date" value={sellForm.soldDate}
             onChange={(e) => setSellForm((f) => ({ ...f, soldDate: e.target.value }))}
           />
+          <Select
+            label="Comprador (opcional)"
+            value={sellForm.clientId}
+            onChange={(e) => setSellForm((f) => ({ ...f, clientId: e.target.value }))}
+            options={clients.map((c) => ({ value: c.id, label: `${c.firstName} ${c.lastName} — DNI ${c.dni}` }))}
+            placeholder="Sin comprador asignado"
+          />
           {sellForm.soldPrice > 0 && (
             <div className={`p-3 rounded-xl text-sm font-medium ${sellForm.soldPrice - totalInvested >= 0 ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
               Ganancia: {formatCurrency(sellForm.soldPrice - totalInvested)}
             </div>
           )}
+        </div>
+      </Modal>
+
+      {/* Assign buyer modal */}
+      <Modal
+        isOpen={showAssignBuyerModal}
+        onClose={() => { setShowAssignBuyerModal(false); setAssignBuyerId(''); }}
+        title="Asignar comprador"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => { setShowAssignBuyerModal(false); setAssignBuyerId(''); }}>Cancelar</Button>
+            <Button onClick={handleAssignBuyer} disabled={!assignBuyerId}>Asignar</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Seleccioná el cliente que compró este vehículo.
+          </p>
+          <Select
+            label="Cliente"
+            value={assignBuyerId}
+            onChange={(e) => setAssignBuyerId(e.target.value)}
+            options={clients.map((c) => ({ value: c.id, label: `${c.firstName} ${c.lastName} — DNI ${c.dni}` }))}
+            placeholder="Seleccionar cliente"
+          />
         </div>
       </Modal>
 

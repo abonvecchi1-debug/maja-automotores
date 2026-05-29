@@ -81,6 +81,7 @@ export interface Client {
   city: string;
   province: string;
   notes: string;
+  birthDate?: string;
   createdAt: string;
 }
 

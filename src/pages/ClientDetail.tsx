@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Car, AlertTriangle, CheckCircle, Plus, Edit2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Car, AlertTriangle, CheckCircle, Plus, Edit2, Trash2, Cake, Link2 } from 'lucide-react';
 import { useStore } from '../store';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -14,7 +14,7 @@ import { formatCurrency, formatDate, vehicleLabel } from '../utils/formatters';
 export function ClientDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { clients, sales, installmentPayments, vehicles, addSale, markInstallmentPaid, updateClient, deleteClient } = useStore();
+  const { clients, sales, installmentPayments, vehicles, addSale, markInstallmentPaid, updateClient, deleteClient, updateVehicle } = useStore();
 
   const client = clients.find((c) => c.id === id);
   const clientSales = sales.filter((s) => s.clientId === id);
@@ -25,6 +25,8 @@ export function ClientDetail() {
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showLinkVehicleModal, setShowLinkVehicleModal] = useState(false);
+  const [linkVehicleId, setLinkVehicleId] = useState('');
   const [saleForm, setSaleForm] = useState({
     vehicleId: '', saleDate: new Date().toISOString().split('T')[0],
     salePrice: 0, paymentType: 'contado' as 'contado' | 'financiado',
@@ -33,7 +35,7 @@ export function ClientDetail() {
   });
   const [editForm, setEditForm] = useState({
     firstName: '', lastName: '', dni: '', cuit: '', phone: '', phone2: '',
-    email: '', address: '', city: '', province: '', notes: '',
+    email: '', address: '', city: '', province: '', notes: '', birthDate: '',
   });
 
   if (!client) {
@@ -48,6 +50,13 @@ export function ClientDetail() {
   }
 
   const today = new Date().toISOString().split('T')[0];
+  const todayMMDD = today.slice(5);
+  const isBirthdayToday = !!client?.birthDate && client.birthDate.slice(5) === todayMMDD;
+
+  const soldVehiclesWithoutBuyer = vehicles.filter(
+    (v) => v.status === 'vendido' && !v.soldToClientId
+  );
+
   const totalPaid = clientPayments.filter((p) => p.paid).reduce((a, p) => a + p.amount, 0);
   const totalPending = clientPayments.filter((p) => !p.paid).reduce((a, p) => a + p.amount, 0);
   const overduePayments = clientPayments.filter((p) => !p.paid && p.dueDate < today);
@@ -67,13 +76,26 @@ export function ClientDetail() {
       city: client.city,
       province: client.province,
       notes: client.notes,
+      birthDate: client.birthDate ?? '',
     });
     setShowEditModal(true);
   };
 
   const handleEditSave = () => {
-    updateClient(id!, { ...editForm, cuit: editForm.cuit || undefined, phone2: editForm.phone2 || undefined });
+    updateClient(id!, {
+      ...editForm,
+      cuit: editForm.cuit || undefined,
+      phone2: editForm.phone2 || undefined,
+      birthDate: editForm.birthDate || undefined,
+    });
     setShowEditModal(false);
+  };
+
+  const handleLinkVehicle = () => {
+    if (!linkVehicleId) return;
+    updateVehicle(linkVehicleId, { soldToClientId: id! });
+    setShowLinkVehicleModal(false);
+    setLinkVehicleId('');
   };
 
   const handleDelete = () => {
@@ -136,7 +158,14 @@ export function ClientDetail() {
               {client.firstName[0]}{client.lastName[0]}
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900">{client.firstName} {client.lastName}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold text-slate-900">{client.firstName} {client.lastName}</h1>
+                {isBirthdayToday && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                    <Cake size={12} /> ¡Hoy cumple años!
+                  </span>
+                )}
+              </div>
               <p className="text-slate-500 text-sm">DNI: {client.dni} · Cliente desde {formatDate(client.createdAt)}</p>
             </div>
           </div>
@@ -148,6 +177,11 @@ export function ClientDetail() {
           <Button variant="danger" size="sm" onClick={() => setShowDeleteConfirm(true)}>
             <Trash2 size={14} /> Eliminar
           </Button>
+          {soldVehiclesWithoutBuyer.length > 0 && (
+            <Button variant="outline" size="sm" onClick={() => setShowLinkVehicleModal(true)}>
+              <Link2 size={14} /> Vincular vehículo
+            </Button>
+          )}
           <Button onClick={() => setShowSaleModal(true)}>
             <Plus size={16} /> Registrar venta
           </Button>
@@ -287,6 +321,7 @@ export function ClientDetail() {
                 ['Dirección', client.address],
                 ['Ciudad', client.city],
                 ['Provincia', client.province],
+                ...(client.birthDate ? [['Fecha de nacimiento', formatDate(client.birthDate)] as [string, string]] : []),
               ].map(([k, v]) => (
                 <div key={String(k)}>
                   <dt className="text-xs font-medium text-slate-400 uppercase tracking-wide">{k}</dt>
@@ -464,6 +499,10 @@ export function ClientDetail() {
             onChange={(e) => setEditForm((f) => ({ ...f, province: e.target.value }))}
             placeholder="Ej: Buenos Aires"
           />
+          <Input
+            label="Fecha de nacimiento (opcional)" type="date" value={editForm.birthDate}
+            onChange={(e) => setEditForm((f) => ({ ...f, birthDate: e.target.value }))}
+          />
           <div className="col-span-1 sm:col-span-2">
             <Textarea
               label="Notas" value={editForm.notes}
@@ -471,6 +510,35 @@ export function ClientDetail() {
               placeholder="Observaciones del cliente..."
             />
           </div>
+        </div>
+      </Modal>
+
+      {/* Link vehicle modal */}
+      <Modal
+        isOpen={showLinkVehicleModal}
+        onClose={() => { setShowLinkVehicleModal(false); setLinkVehicleId(''); }}
+        title="Vincular vehículo vendido"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => { setShowLinkVehicleModal(false); setLinkVehicleId(''); }}>Cancelar</Button>
+            <Button onClick={handleLinkVehicle} disabled={!linkVehicleId}>Vincular</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Seleccioná un vehículo vendido para asociarlo como compra de <span className="font-semibold">{client.firstName} {client.lastName}</span>.
+          </p>
+          <Select
+            label="Vehículo vendido sin comprador asignado"
+            value={linkVehicleId}
+            onChange={(e) => setLinkVehicleId(e.target.value)}
+            options={soldVehiclesWithoutBuyer.map((v) => ({
+              value: v.id,
+              label: `${vehicleLabel(v.brand, v.model, v.year)} — ${v.patent}${v.soldDate ? ` (vendido ${formatDate(v.soldDate)})` : ''}`,
+            }))}
+            placeholder="Seleccionar vehículo"
+          />
         </div>
       </Modal>
 
