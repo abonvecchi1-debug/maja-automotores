@@ -351,6 +351,7 @@ export function Cheques() {
   const [cheques, setCheques] = useState<Cheque[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ open: boolean; editing: Cheque | null }>({ open: false, editing: null });
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -395,9 +396,9 @@ export function Cheques() {
   }
 
   async function del(id: string) {
-    if (!confirm('¿Eliminar este cheque?')) return;
     await fetch(`/api/cheques/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${getToken()}` } });
     setCheques((p) => p.filter((c) => c.id !== id));
+    setDeleteId(null);
   }
 
   function clearFilters() {
@@ -624,16 +625,30 @@ export function Cheques() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => setModal({ open: true, editing: c })}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
-                            <Pencil size={14} />
-                          </button>
-                          <button onClick={() => del(c.id)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
+                        {deleteId === c.id ? (
+                          <div className="flex items-center gap-1 whitespace-nowrap">
+                            <span className="text-xs text-gray-500 mr-1">¿Eliminar?</span>
+                            <button onClick={() => del(c.id)}
+                              className="px-2 py-1 rounded-lg text-xs font-medium bg-red-500 hover:bg-red-600 text-white transition-colors">
+                              Sí
+                            </button>
+                            <button onClick={() => setDeleteId(null)}
+                              className="px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors">
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => setModal({ open: true, editing: c })}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                              <Pencil size={14} />
+                            </button>
+                            <button onClick={() => setDeleteId(c.id)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
