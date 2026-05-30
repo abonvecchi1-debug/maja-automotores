@@ -16,6 +16,7 @@ type Moneda = 'ARS' | 'USD';
 interface Cheque {
   id: string;
   numero: string;
+  serie: string;
   banco: string;
   monto: number;
   moneda: Moneda;
@@ -25,6 +26,7 @@ interface Cheque {
   alPortador: boolean;
   endosado: boolean;
   endosadoPor: string;
+  dniEndosante: string;
   librador: string;
   cuitLibrador: string;
   recibidoDe: string;
@@ -87,9 +89,9 @@ function unique(arr: string[]) {
 
 function emptyForm(): Omit<Cheque, 'id' | 'createdAt'> {
   return {
-    numero: '', banco: '', monto: 0, moneda: 'ARS',
+    numero: '', serie: '', banco: '', monto: 0, moneda: 'ARS',
     fechaEmision: '', fechaVencimiento: '', tipo: 'al_dia',
-    alPortador: false, endosado: false, endosadoPor: '',
+    alPortador: false, endosado: false, endosadoPor: '', dniEndosante: '',
     librador: '', cuitLibrador: '', recibidoDe: '', entregadoA: '',
     estado: 'en_cartera', observaciones: '',
   };
@@ -138,6 +140,9 @@ function ChequeModal({
             <FL label="Número de cheque *">
               <input className={iCls} value={form.numero} onChange={e => set('numero', e.target.value)} placeholder="000000" />
             </FL>
+            <FL label="Serie (opcional)">
+              <input className={iCls} value={form.serie} onChange={e => set('serie', e.target.value)} placeholder="Ej: A, B, 001..." />
+            </FL>
             <FL label="Banco emisor *">
               <input className={iCls} value={form.banco} onChange={e => set('banco', e.target.value)} placeholder="Ej: Santander" />
             </FL>
@@ -185,11 +190,16 @@ function ChequeModal({
             </label>
           </div>
 
-          {/* Endosado por (solo si endosado=true) */}
+          {/* Datos del endoso (solo si endosado=true) */}
           {form.endosado && (
-            <FL label="Endosado por (quién lo firmó al dorso)">
-              <input className={iCls} value={form.endosadoPor} onChange={e => set('endosadoPor', e.target.value)} placeholder="Nombre del endosante" />
-            </FL>
+            <div className="grid grid-cols-2 gap-4">
+              <FL label="Endosado por (quién lo firmó al dorso)">
+                <input className={iCls} value={form.endosadoPor} onChange={e => set('endosadoPor', e.target.value)} placeholder="Nombre del endosante" />
+              </FL>
+              <FL label="DNI / CUIT del endosante">
+                <input className={iCls} value={form.dniEndosante} onChange={e => set('dniEndosante', e.target.value)} placeholder="20-12345678-9" />
+              </FL>
+            </div>
           )}
 
           {/* Personas */}

@@ -9,6 +9,7 @@ router.use(authenticateToken);
 const map = (r) => ({
   id: r.id,
   numero: r.numero,
+  serie: r.serie ?? '',
   banco: r.banco,
   monto: r.monto,
   moneda: r.moneda,
@@ -18,6 +19,7 @@ const map = (r) => ({
   alPortador: r.al_portador === 1,
   endosado: r.endosado === 1,
   endosadoPor: r.endosado_por ?? '',
+  dniEndosante: r.dni_endosante ?? '',
   librador: r.librador,
   cuitLibrador: r.cuit_librador,
   recibidoDe: r.recibido_de,
@@ -46,14 +48,14 @@ router.post('/', (req, res) => {
   const b = req.body;
   const id = randomUUID();
   db.prepare(`INSERT INTO cheques
-    (id,numero,banco,monto,moneda,fecha_emision,fecha_vencimiento,tipo,al_portador,endosado,endosado_por,
+    (id,numero,serie,banco,monto,moneda,fecha_emision,fecha_vencimiento,tipo,al_portador,endosado,endosado_por,dni_endosante,
      librador,cuit_librador,recibido_de,entregado_a,estado,observaciones,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(
-      id, b.numero ?? '', b.banco ?? '', b.monto ?? 0, b.moneda ?? 'ARS',
+      id, b.numero ?? '', b.serie ?? '', b.banco ?? '', b.monto ?? 0, b.moneda ?? 'ARS',
       b.fechaEmision ?? '', b.fechaVencimiento ?? '',
       b.tipo ?? 'al_dia', b.alPortador ? 1 : 0, b.endosado ? 1 : 0,
-      b.endosadoPor ?? '',
+      b.endosadoPor ?? '', b.dniEndosante ?? '',
       b.librador ?? '', b.cuitLibrador ?? '', b.recibidoDe ?? '',
       b.entregadoA ?? '', b.estado ?? 'en_cartera', b.observaciones ?? '',
       new Date().toISOString(),
@@ -67,12 +69,14 @@ router.put('/:id', (req, res) => {
   if (!ex) return res.status(404).json({ error: 'Cheque no encontrado' });
   const b = req.body;
   db.prepare(`UPDATE cheques SET
-    numero=?,banco=?,monto=?,moneda=?,fecha_emision=?,fecha_vencimiento=?,tipo=?,
-    al_portador=?,endosado=?,endosado_por=?,librador=?,cuit_librador=?,recibido_de=?,entregado_a=?,
+    numero=?,serie=?,banco=?,monto=?,moneda=?,fecha_emision=?,fecha_vencimiento=?,tipo=?,
+    al_portador=?,endosado=?,endosado_por=?,dni_endosante=?,librador=?,cuit_librador=?,recibido_de=?,entregado_a=?,
     estado=?,observaciones=?
     WHERE id=?`)
     .run(
-      b.numero ?? ex.numero, b.banco ?? ex.banco,
+      b.numero ?? ex.numero,
+      b.serie !== undefined ? b.serie : (ex.serie ?? ''),
+      b.banco ?? ex.banco,
       b.monto !== undefined ? b.monto : ex.monto,
       b.moneda ?? ex.moneda,
       b.fechaEmision !== undefined ? b.fechaEmision : ex.fecha_emision,
@@ -81,6 +85,7 @@ router.put('/:id', (req, res) => {
       b.alPortador !== undefined ? (b.alPortador ? 1 : 0) : ex.al_portador,
       b.endosado !== undefined ? (b.endosado ? 1 : 0) : ex.endosado,
       b.endosadoPor !== undefined ? b.endosadoPor : (ex.endosado_por ?? ''),
+      b.dniEndosante !== undefined ? b.dniEndosante : (ex.dni_endosante ?? ''),
       b.librador !== undefined ? b.librador : ex.librador,
       b.cuitLibrador !== undefined ? b.cuitLibrador : ex.cuit_librador,
       b.recibidoDe !== undefined ? b.recibidoDe : ex.recibido_de,
