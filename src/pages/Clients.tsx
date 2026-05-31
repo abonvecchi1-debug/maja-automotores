@@ -52,7 +52,13 @@ export function Clients() {
     };
   };
 
-  const clientPurchases = (clientId: string) => sales.filter((s) => s.clientId === clientId).length;
+  const clientPurchases = (clientId: string) => {
+    const formal = sales.filter((s) => s.clientId === clientId).length;
+    const linked = vehicles.filter(
+      (v) => v.soldToClientId === clientId && !sales.some((s) => s.clientId === clientId && s.vehicleId === v.id)
+    ).length;
+    return formal + linked;
+  };
 
   const handleSave = () => {
     if (!form.firstName.trim()) { setFormError('El nombre es obligatorio.'); return; }

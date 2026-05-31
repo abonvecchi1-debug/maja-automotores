@@ -21,6 +21,10 @@ export function ClientDetail() {
   const clientPayments = installmentPayments.filter((p) =>
     clientSales.some((s) => s.id === p.saleId)
   );
+  // Vehículos vinculados directamente (sin venta formal registrada)
+  const linkedVehicles = vehicles.filter(
+    (v) => v.soldToClientId === id && !clientSales.some((s) => s.vehicleId === v.id)
+  );
 
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -214,7 +218,7 @@ export function ClientDetail() {
             </Card>
             <Card className="bg-blue-50">
               <p className="text-xs text-slate-500 font-medium">Compras totales</p>
-              <p className="text-xl font-bold text-brand-600 mt-1">{clientSales.length}</p>
+              <p className="text-xl font-bold text-brand-600 mt-1">{clientSales.length + linkedVehicles.length}</p>
             </Card>
           </div>
 
@@ -291,7 +295,25 @@ export function ClientDetail() {
             );
           })}
 
-          {clientSales.length === 0 && (
+          {/* Vehículos vinculados sin venta formal */}
+          {linkedVehicles.map((v) => (
+            <Card key={v.id}>
+              <div className="flex items-center gap-3">
+                <Car size={18} className="text-brand-500" />
+                <div className="flex-1">
+                  <p className="font-semibold text-slate-900">{vehicleLabel(v.brand, v.model, v.year)}</p>
+                  <p className="text-sm text-slate-500">
+                    Vehículo vinculado · {v.patent}{v.soldDate ? ` · vendido ${formatDate(v.soldDate)}` : ''}
+                  </p>
+                </div>
+                {v.soldPrice != null && (
+                  <p className="text-lg font-bold text-slate-700">{formatCurrency(v.soldPrice)}</p>
+                )}
+              </div>
+            </Card>
+          ))}
+
+          {clientSales.length === 0 && linkedVehicles.length === 0 && (
             <Card>
               <p className="text-center text-slate-400 py-4">Este cliente aún no tiene compras registradas.</p>
             </Card>
