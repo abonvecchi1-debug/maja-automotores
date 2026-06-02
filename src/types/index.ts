@@ -180,6 +180,8 @@ export interface Transaction {
   vehicleId?: string;
   clientId?: string;
   supplierId?: string;
+  paid?: boolean;        // solo relevante para egresos (pagado / pendiente)
+  paidDate?: string;
   createdAt: string;
 }
 

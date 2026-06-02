@@ -34,7 +34,7 @@ export function Dashboard() {
         .filter((r) => r.month === thisMonth)
         .reduce((acc, r) => acc + r.amount, 0)
     + transactions
-        .filter((t) => t.type === 'egreso' && t.date.startsWith(thisMonth))
+        .filter((t) => t.type === 'egreso' && t.paid !== false && t.date.startsWith(thisMonth))
         .reduce((acc, t) => acc + t.amount, 0)
     + taxPayments
         .filter((t) => t.paid && t.paidDate?.startsWith(thisMonth))
@@ -79,7 +79,7 @@ export function Dashboard() {
           .filter((r) => r.month === m)
           .reduce((acc, r) => acc + r.amount, 0)
       + transactions
-          .filter((t) => t.type === 'egreso' && t.date.startsWith(m))
+          .filter((t) => t.type === 'egreso' && t.paid !== false && t.date.startsWith(m))
           .reduce((acc, t) => acc + t.amount, 0)
       + taxPayments
           .filter((t) => t.paid && t.paidDate?.startsWith(m))
@@ -369,7 +369,7 @@ export function Dashboard() {
           .map((e) => ({ key: `e-${e.id}`, description: e.description, category: e.category, amount: e.amount, date: e.date, source: 'gasto' as const }));
 
         const fromTransactions: EgresoItem[] = transactions
-          .filter((t) => t.type === 'egreso' && t.date.startsWith(thisMonth))
+          .filter((t) => t.type === 'egreso' && t.paid !== false && t.date.startsWith(thisMonth))
           .map((t) => ({ key: `t-${t.id}`, description: t.description, category: t.category, amount: t.amount, date: t.date, source: 'finanzas' as const }));
 
         const fromTaxPayments: EgresoItem[] = taxPayments

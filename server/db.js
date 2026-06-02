@@ -288,6 +288,10 @@ try { db.exec(`ALTER TABLE cheques ADD COLUMN endosado_por TEXT NOT NULL DEFAULT
 try { db.exec(`ALTER TABLE cheques ADD COLUMN serie TEXT NOT NULL DEFAULT ''`); } catch {}
 try { db.exec(`ALTER TABLE cheques ADD COLUMN dni_endosante TEXT NOT NULL DEFAULT ''`); } catch {}
 try { db.exec(`ALTER TABLE clients ADD COLUMN birth_date TEXT`); } catch {}
+// Estado de pago en movimientos de Finanzas (egresos pagados / pendientes).
+// Default 1 = los movimientos existentes quedan como "pagados" para no alterar balances previos.
+try { db.exec(`ALTER TABLE transactions ADD COLUMN paid INTEGER NOT NULL DEFAULT 1`); } catch {}
+try { db.exec(`ALTER TABLE transactions ADD COLUMN paid_date TEXT`); } catch {}
 
 // Sync infrastructure
 db.exec(`

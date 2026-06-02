@@ -65,6 +65,7 @@ interface AppStore {
   deleteTask: (id: string) => void;
 
   addTransaction: (t: Omit<Transaction, 'id' | 'createdAt'>) => void;
+  markTransactionPaid: (id: string, paid?: boolean) => void;
   deleteTransaction: (id: string) => void;
 
   updateSettings: (s: Partial<AppSettings>) => void;
@@ -375,6 +376,10 @@ export const useStore = create<AppStore>((set, get) => ({
         .then(({ transaction }) => set((s) => ({ transactions: s.transactions.map((x) => x.id === tempId ? transaction : x) }))),
       () => set((s) => ({ transactions: s.transactions.filter((x) => x.id !== tempId) }))
     );
+  },
+  markTransactionPaid: (id, paid = true) => {
+    set((s) => ({ transactions: s.transactions.map((t) => t.id === id ? { ...t, paid, paidDate: paid ? today() : undefined } : t) }));
+    sync(() => authFetch(`/api/transactions/${id}/pay`, { method: 'PUT', body: JSON.stringify({ paid }) }).then(() => {}));
   },
   deleteTransaction: (id) => {
     const prev = get().transactions;

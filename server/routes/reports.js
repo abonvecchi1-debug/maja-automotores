@@ -54,10 +54,11 @@ router.get('/balance', authenticateToken, requireAdmin, (req, res) => {
   `).all(from, to);
 
   // Egresos e ingresos registrados en Finanzas
+  // Solo egresos de Finanzas ya pagados impactan en el balance (los pendientes no descuentan)
   const egresosFinanzas = db.prepare(`
     SELECT id, description, date, amount, category
     FROM transactions
-    WHERE type = 'egreso' AND date >= ? AND date <= ?
+    WHERE type = 'egreso' AND paid = 1 AND date >= ? AND date <= ?
     ORDER BY date
   `).all(from, to);
 
