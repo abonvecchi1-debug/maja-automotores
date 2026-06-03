@@ -49,7 +49,7 @@ const INITIAL_EXPENSE = { description: '', amount: 0, date: new Date().toISOStri
 export function VehicleDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { vehicles, expenses, suppliers, clients, updateVehicle, deleteVehicle, addExpense, deleteExpense, markExpensePaid } = useStore();
+  const { vehicles, expenses, suppliers, clients, updateVehicle, deleteVehicle, addExpense, deleteExpense, markExpensePaid, addTransaction } = useStore();
 
   const vehicle = vehicles.find((v) => v.id === id);
   const vExpenses = expenses.filter((e) => e.vehicleId === id);
@@ -60,6 +60,7 @@ export function VehicleDetail() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAssignBuyerModal, setShowAssignBuyerModal] = useState(false);
   const [showSenaModal, setShowSenaModal] = useState(false);
+  const [showCancelSenaModal, setShowCancelSenaModal] = useState(false);
   const [assignBuyerId, setAssignBuyerId] = useState('');
   const [expenseForm, setExpenseForm] = useState(INITIAL_EXPENSE);
   const [sellForm, setSellForm] = useState({ soldPrice: 0, soldDate: new Date().toISOString().split('T')[0], clientId: '' });
@@ -148,9 +149,23 @@ export function VehicleDetail() {
     updateVehicle(id!, { status: 'comprado' });
   };
 
-  const handleCancelSena = () => {
-    // senaAmount: 0 desmarca la seña en los cálculos; vuelve a estar disponible
+  // Resolver una seña que se cae. createTx: 'ingreso' = nos quedamos la plata,
+  // 'egreso' = la perdimos, null = la plata vuelve a su dueño (no hay impacto neto).
+  const handleResolveSena = (createTx: 'ingreso' | 'egreso' | null, label: string) => {
+    const monto = vehicle.senaAmount ?? 0;
+    if (createTx && monto > 0) {
+      addTransaction({
+        type: createTx,
+        category: createTx === 'ingreso' ? 'otro_ingreso' : 'otro_egreso',
+        amount: monto,
+        description: `${label} — ${vehicle.brand} ${vehicle.model}`,
+        date: new Date().toISOString().split('T')[0],
+        paid: true,
+        vehicleId: id!,
+      });
+    }
     updateVehicle(id!, { status: 'publicado', senaAmount: 0 });
+    setShowCancelSenaModal(false);
   };
 
   const handleAssignBuyer = () => {
@@ -340,8 +355,8 @@ export function VehicleDetail() {
                   <DollarSign size={14} /> Registrar venta completa
                 </Button>
               )}
-              <Button size="sm" variant="outline" onClick={handleCancelSena}>
-                Cancelar seña
+              <Button size="sm" variant="outline" onClick={() => setShowCancelSenaModal(true)}>
+                Se cayó la seña
               </Button>
             </div>
           </div>
@@ -773,6 +788,56 @@ export function VehicleDetail() {
               options={clients.map((c) => ({ value: c.id, label: `${c.firstName} ${c.lastName} — DNI ${c.dni}` }))}
               placeholder="Sin comprador asignado" />
           )}
+        </div>
+      </Modal>
+
+      {/* Se cayó la seña modal */}
+      <Modal
+        isOpen={showCancelSenaModal}
+        onClose={() => setShowCancelSenaModal(false)}
+        title="Se cayó la seña"
+        footer={<Button variant="outline" onClick={() => setShowCancelSenaModal(false)}>Cerrar</Button>}
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">
+            La operación no se concretó. ¿Qué pasó con la seña de <span className="font-semibold">{formatCurrency(vehicle.senaAmount ?? 0)}</span>?
+          </p>
+          {vehicle.senaType === 'compra' ? (
+            <>
+              <button
+                onClick={() => handleResolveSena(null, 'Seña recuperada')}
+                className="w-full text-left p-3 rounded-xl border-2 border-green-200 bg-green-50 hover:border-green-400 transition-colors"
+              >
+                <p className="text-sm font-semibold text-green-800">Se cayó por el vendedor</p>
+                <p className="text-xs text-green-700">Te devuelven la seña — la plata vuelve a vos.</p>
+              </button>
+              <button
+                onClick={() => handleResolveSena('egreso', 'Seña perdida')}
+                className="w-full text-left p-3 rounded-xl border-2 border-red-200 bg-red-50 hover:border-red-400 transition-colors"
+              >
+                <p className="text-sm font-semibold text-red-800">Se cayó por vos</p>
+                <p className="text-xs text-red-700">Perdés la seña — queda registrada como egreso.</p>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => handleResolveSena('ingreso', 'Seña retenida')}
+                className="w-full text-left p-3 rounded-xl border-2 border-green-200 bg-green-50 hover:border-green-400 transition-colors"
+              >
+                <p className="text-sm font-semibold text-green-800">Se cayó por el cliente</p>
+                <p className="text-xs text-green-700">Te quedás con la seña — entra como ingreso.</p>
+              </button>
+              <button
+                onClick={() => handleResolveSena(null, 'Seña devuelta')}
+                className="w-full text-left p-3 rounded-xl border-2 border-slate-200 bg-slate-50 hover:border-slate-400 transition-colors"
+              >
+                <p className="text-sm font-semibold text-slate-800">Se cayó por vos</p>
+                <p className="text-xs text-slate-600">Le devolvés la plata al cliente — no queda nada.</p>
+              </button>
+            </>
+          )}
+          <p className="text-[11px] text-slate-400">El vehículo vuelve a estado "Publicado".</p>
         </div>
       </Modal>
 
