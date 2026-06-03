@@ -1,6 +1,6 @@
 // ─── Enums / Union types ───────────────────────────────────────────────────
 
-export type VehicleStatus = 'comprado' | 'preparacion' | 'publicado' | 'vendido';
+export type VehicleStatus = 'comprado' | 'preparacion' | 'publicado' | 'señado' | 'vendido';
 export type SupplierType = 'mecanico' | 'repuestero' | 'lavadero' | 'gestor' | 'otro';
 export type TaskStatus = 'pendiente' | 'en_proceso' | 'terminado';
 export type TaskPriority = 'baja' | 'media' | 'alta';
@@ -43,6 +43,12 @@ export interface Vehicle {
   soldDate?: string;
   soldToClientId?: string;
   saleId?: string;
+  // Seña (reserva con depósito): venta = me lo señaron, compra = yo lo señé
+  senaAmount?: number;
+  senaDate?: string;
+  senaType?: 'venta' | 'compra';
+  senaClientId?: string;
+  senaMethod?: PaymentMethod;
   checklist: {
     lavado: boolean;
     pulido: boolean;

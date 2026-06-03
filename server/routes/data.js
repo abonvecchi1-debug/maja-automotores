@@ -18,6 +18,8 @@ const mapVehicle = (r) => ({
   purchaseDate: r.purchase_date, soldDate: n(r.sold_date),
   soldToClientId: n(r.sold_to_client_id), saleId: n(r.sale_id),
   tradeInVehicleId: n(r.trade_in_vehicle_id),
+  senaAmount: n(r.sena_amount), senaDate: n(r.sena_date), senaType: n(r.sena_type),
+  senaClientId: n(r.sena_client_id), senaMethod: n(r.sena_method),
   checklist: j(r.checklist), documents: j(r.documents),
   images: j(r.images), publishLinks: j(r.publish_links), priceHistory: j(r.price_history),
   notes: r.notes, createdAt: r.created_at,

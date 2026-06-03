@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, CheckSquare, Square, DollarSign, Wrench, Edit2, ImagePlus, X, UserPlus } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CheckSquare, Square, DollarSign, Wrench, Edit2, ImagePlus, X, UserPlus, HandCoins } from 'lucide-react';
 import { useStore } from '../store';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -14,7 +14,14 @@ import {
   statusLabel, statusColor, supplierTypeLabel,
 } from '../utils/formatters';
 import { uploadVehicleImage } from '../utils/upload';
-import type { VehicleStatus } from '../types';
+import type { VehicleStatus, PaymentMethod } from '../types';
+
+const SENA_METHODS: { value: PaymentMethod; label: string }[] = [
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'transferencia', label: 'Transferencia' },
+  { value: 'cheque', label: 'Cheque' },
+  { value: 'credito_prendario', label: 'Crédito prendario' },
+];
 
 const STATUS_FLOW: VehicleStatus[] = ['comprado', 'preparacion', 'publicado', 'vendido'];
 
@@ -52,9 +59,14 @@ export function VehicleDetail() {
   const [showSellModal, setShowSellModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAssignBuyerModal, setShowAssignBuyerModal] = useState(false);
+  const [showSenaModal, setShowSenaModal] = useState(false);
   const [assignBuyerId, setAssignBuyerId] = useState('');
   const [expenseForm, setExpenseForm] = useState(INITIAL_EXPENSE);
   const [sellForm, setSellForm] = useState({ soldPrice: 0, soldDate: new Date().toISOString().split('T')[0], clientId: '' });
+  const [senaForm, setSenaForm] = useState({
+    type: 'venta' as 'venta' | 'compra', amount: 0,
+    date: new Date().toISOString().split('T')[0], clientId: '', method: 'efectivo' as PaymentMethod,
+  });
   const [editForm, setEditForm] = useState({
     brand: '', model: '', year: 0, km: 0,
     color: '', patent: '', purchasePrice: 0, publishPrice: 0,
@@ -91,8 +103,17 @@ export function VehicleDetail() {
   };
 
   const handleStatusChange = (newStatus: VehicleStatus) => {
-    if (newStatus === 'vendido') { setShowSellModal(true); return; }
+    if (newStatus === 'vendido') { openSellModal(); return; }
     updateVehicle(id!, { status: newStatus });
+  };
+
+  const openSellModal = () => {
+    setSellForm({
+      soldPrice: vehicle.soldPrice ?? vehicle.publishPrice ?? 0,
+      soldDate: new Date().toISOString().split('T')[0],
+      clientId: vehicle.senaClientId ?? '',
+    });
+    setShowSellModal(true);
   };
 
   const handleSell = () => {
@@ -103,6 +124,33 @@ export function VehicleDetail() {
       ...(sellForm.clientId ? { soldToClientId: sellForm.clientId } : {}),
     });
     setShowSellModal(false);
+  };
+
+  const openSenaModal = () => {
+    setSenaForm({ type: 'venta', amount: 0, date: new Date().toISOString().split('T')[0], clientId: '', method: 'efectivo' });
+    setShowSenaModal(true);
+  };
+
+  const handleSenar = () => {
+    if (!senaForm.amount) return;
+    updateVehicle(id!, {
+      status: 'señado',
+      senaType: senaForm.type,
+      senaAmount: senaForm.amount,
+      senaDate: senaForm.date,
+      senaClientId: senaForm.type === 'venta' ? (senaForm.clientId || undefined) : undefined,
+      senaMethod: senaForm.method,
+    });
+    setShowSenaModal(false);
+  };
+
+  const handleCompleteCompra = () => {
+    updateVehicle(id!, { status: 'comprado' });
+  };
+
+  const handleCancelSena = () => {
+    // senaAmount: 0 desmarca la seña en los cálculos; vuelve a estar disponible
+    updateVehicle(id!, { status: 'publicado', senaAmount: 0 });
   };
 
   const handleAssignBuyer = () => {
@@ -222,7 +270,7 @@ export function VehicleDetail() {
               <div key={s} className="flex items-center gap-2 flex-1">
                 <button
                   onClick={() => handleStatusChange(s)}
-                  disabled={vehicle.status === 'vendido'}
+                  disabled={vehicle.status === 'vendido' || vehicle.status === 'señado'}
                   className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium text-center transition-colors ${
                     isActive ? 'bg-brand-600 text-white shadow-sm' :
                     isPast ? 'bg-green-100 text-green-700' :
@@ -253,6 +301,49 @@ export function VehicleDetail() {
                 <UserPlus size={13} /> Asignar comprador
               </button>
             )}
+          </div>
+        )}
+
+        {/* Botón Señar (cuando está en stock) */}
+        {vehicle.status !== 'vendido' && vehicle.status !== 'señado' && (
+          <div className="mt-3">
+            <Button variant="outline" size="sm" onClick={openSenaModal}>
+              <HandCoins size={14} /> Señar este vehículo
+            </Button>
+          </div>
+        )}
+
+        {/* Banner de seña activa */}
+        {vehicle.status === 'señado' && (
+          <div className="mt-3 bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <HandCoins size={18} className="text-purple-600" />
+              <p className="text-sm font-semibold text-purple-900">
+                {vehicle.senaType === 'compra' ? 'Vehículo señado para comprar' : 'Vehículo señado por un comprador'}
+              </p>
+            </div>
+            <p className="text-sm text-purple-800">
+              Seña: <span className="font-bold">{formatCurrency(vehicle.senaAmount ?? 0)}</span>
+              {vehicle.senaClientId && (() => {
+                const c = clients.find((x) => x.id === vehicle.senaClientId);
+                return c ? <span> · {c.firstName} {c.lastName}</span> : null;
+              })()}
+              {vehicle.senaDate ? ` · ${formatDate(vehicle.senaDate)}` : ''}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {vehicle.senaType === 'compra' ? (
+                <Button size="sm" onClick={handleCompleteCompra}>
+                  <CheckSquare size={14} /> Completar compra
+                </Button>
+              ) : (
+                <Button size="sm" onClick={openSellModal}>
+                  <DollarSign size={14} /> Registrar venta completa
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={handleCancelSena}>
+                Cancelar seña
+              </Button>
+            </div>
           </div>
         )}
       </Card>
@@ -441,7 +532,7 @@ export function VehicleDetail() {
               )}
             </div>
             {vehicle.status !== 'vendido' && (
-              <Button className="w-full mt-4" onClick={() => setShowSellModal(true)}>
+              <Button className="w-full mt-4" onClick={openSellModal}>
                 <DollarSign size={15} /> Registrar venta
               </Button>
             )}
@@ -607,6 +698,9 @@ export function VehicleDetail() {
           <div className="p-4 bg-slate-50 rounded-xl text-sm">
             <p className="text-slate-600">Vehículo: <span className="font-semibold text-slate-900">{vehicle.brand} {vehicle.model} {vehicle.year}</span></p>
             <p className="text-slate-600 mt-1">Precio publicado: <span className="font-semibold">{formatCurrency(vehicle.publishPrice)}</span></p>
+            {vehicle.status === 'señado' && (vehicle.senaAmount ?? 0) > 0 && (
+              <p className="text-purple-700 mt-1">Seña ya recibida: <span className="font-semibold">{formatCurrency(vehicle.senaAmount ?? 0)}</span> (parte del pago)</p>
+            )}
           </div>
           <Input
             label="Precio de venta ($)" type="number" value={sellForm.soldPrice}
@@ -627,6 +721,57 @@ export function VehicleDetail() {
             <div className={`p-3 rounded-xl text-sm font-medium ${sellForm.soldPrice - totalInvested >= 0 ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
               Ganancia: {formatCurrency(sellForm.soldPrice - totalInvested)}
             </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Señar modal */}
+      <Modal
+        isOpen={showSenaModal}
+        onClose={() => setShowSenaModal(false)}
+        title="Señar vehículo"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowSenaModal(false)}>Cancelar</Button>
+            <Button onClick={handleSenar}>Guardar seña</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            {([['venta', 'Me lo señaron'], ['compra', 'Yo lo señé']] as const).map(([t, label]) => (
+              <button
+                key={t}
+                onClick={() => setSenaForm((f) => ({ ...f, type: t }))}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors border-2 ${
+                  senaForm.type === t
+                    ? t === 'venta' ? 'bg-green-50 border-green-400 text-green-800' : 'bg-red-50 border-red-400 text-red-800'
+                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500">
+            {senaForm.type === 'venta'
+              ? 'Un comprador te dejó una seña para reservar este vehículo. Cuando se concrete, registrás la venta completa.'
+              : 'Vos dejaste una seña para comprar este vehículo. Cuando termines de pagarlo, lo completás y entra a tu stock.'}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input label="Monto de la seña ($)" type="number" value={senaForm.amount}
+              onChange={(e) => setSenaForm((f) => ({ ...f, amount: +e.target.value }))} />
+            <Input label="Fecha" type="date" value={senaForm.date}
+              onChange={(e) => setSenaForm((f) => ({ ...f, date: e.target.value }))} />
+          </div>
+          <Select label="Medio de pago" value={senaForm.method}
+            onChange={(e) => setSenaForm((f) => ({ ...f, method: e.target.value as PaymentMethod }))}
+            options={SENA_METHODS} />
+          {senaForm.type === 'venta' && (
+            <Select label="Comprador (opcional)" value={senaForm.clientId}
+              onChange={(e) => setSenaForm((f) => ({ ...f, clientId: e.target.value }))}
+              options={clients.map((c) => ({ value: c.id, label: `${c.firstName} ${c.lastName} — DNI ${c.dni}` }))}
+              placeholder="Sin comprador asignado" />
           )}
         </div>
       </Modal>

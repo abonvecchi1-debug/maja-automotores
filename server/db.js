@@ -310,6 +310,12 @@ try { db.exec(`ALTER TABLE transactions ADD COLUMN paid_date TEXT`); } catch {}
 try { db.exec(`ALTER TABLE sales ADD COLUMN payment_methods TEXT NOT NULL DEFAULT '[]'`); } catch {}
 // Vínculo de un cheque con la venta que lo originó
 try { db.exec(`ALTER TABLE cheques ADD COLUMN sale_id TEXT`); } catch {}
+// Seña sobre el vehículo (reserva con depósito): venta = me lo señaron, compra = yo lo señé
+try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_amount REAL`); } catch {}
+try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_date TEXT`); } catch {}
+try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_type TEXT`); } catch {}
+try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_client_id TEXT`); } catch {}
+try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_method TEXT`); } catch {}
 
 // Sync infrastructure
 db.exec(`

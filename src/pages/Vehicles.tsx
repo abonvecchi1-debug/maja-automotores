@@ -20,6 +20,7 @@ const STATUS_OPTIONS = [
   { value: 'comprado',    label: 'Comprado' },
   { value: 'preparacion', label: 'En Preparación' },
   { value: 'publicado',   label: 'Publicado' },
+  { value: 'señado',      label: 'Señado' },
   { value: 'vendido',     label: 'Vendido' },
 ];
 
@@ -197,7 +198,7 @@ export function Vehicles() {
 
       {/* Summary pills */}
       <div className="flex gap-2 flex-wrap">
-        {(['comprado', 'preparacion', 'publicado', 'vendido'] as VehicleStatus[]).map((s) => {
+        {(['comprado', 'preparacion', 'publicado', 'señado', 'vendido'] as VehicleStatus[]).map((s) => {
           const count = vehicles.filter((v) => v.status === s).length;
           return (
             <button

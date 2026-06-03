@@ -51,10 +51,11 @@ const categoryLabel: Record<string, string> = {
   otro_egreso: 'Otro egreso',
 };
 
-/** Movimiento unificado: transacción manual de Finanzas o venta de vehículo (derivada). */
+/** Movimiento unificado de todas las fuentes de dinero (igual criterio que Reportes). */
+type MovSource = 'venta' | 'costo' | 'tx' | 'gasto' | 'fijo' | 'impuesto';
 type Movement = {
   key: string;
-  source: 'tx' | 'venta';
+  source: MovSource;
   type: 'ingreso' | 'egreso';
   category: string;
   description: string;
@@ -63,11 +64,15 @@ type Movement = {
   paid: boolean;
   paidDate?: string;
   txId?: string;        // id de la transacción manual (para pagar / eliminar)
-  vehicleId?: string;   // id del vehículo (para ventas derivadas)
+  vehicleId?: string;   // id del vehículo (ventas / costo)
+};
+
+const sourceTag: Record<MovSource, string> = {
+  venta: 'Venta', costo: 'Costo auto', tx: 'Finanzas', gasto: 'Gasto', fijo: 'Gasto fijo', impuesto: 'Impuesto',
 };
 
 export function Finance() {
-  const { transactions, vehicles, sales, installmentPayments, cheques, senas, addTransaction, deleteTransaction, markTransactionPaid } = useStore();
+  const { transactions, vehicles, sales, installmentPayments, cheques, expenses, fixedExpenseRecords, taxPayments, addTransaction, deleteTransaction, markTransactionPaid } = useStore();
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
@@ -82,72 +87,86 @@ export function Finance() {
     return { value: val, label: formatMonthLabel(val) };
   });
 
-  // ── Movimientos: transacciones manuales + ventas de vehículos (derivadas) ──
-  const txMovements: Movement[] = transactions.map((t) => ({
-    key: `tx-${t.id}`,
-    source: 'tx',
-    type: t.type,
-    category: t.category,
-    description: t.description,
-    amount: t.amount,
-    date: t.date,
-    paid: t.type === 'ingreso' ? true : (t.paid ?? true),
-    paidDate: t.paidDate,
-    txId: t.id,
-  }));
-
-  // Cada vehículo vendido se refleja automáticamente como ingreso (igual que en
-  // Dashboard y Reportes). No se crea una transacción, así que no hay doble conteo.
-  const saleMovements: Movement[] = vehicles
-    .filter((v) => v.status === 'vendido' && v.soldDate)
-    .map((v) => ({
-      key: `venta-${v.id}`,
-      source: 'venta',
-      type: 'ingreso',
-      category: 'venta_vehiculo',
+  // ── Movimientos: TODAS las fuentes (mismo criterio que Reportes) ───────────
+  const movements: Movement[] = [];
+  // Ventas (ingreso) y costo de compra del auto vendido (egreso), imputados al mes de venta
+  for (const v of vehicles.filter((v) => v.status === 'vendido' && v.soldDate)) {
+    movements.push({
+      key: `venta-${v.id}`, source: 'venta', type: 'ingreso', category: 'venta_vehiculo',
       description: `Venta ${v.brand} ${v.model}${v.year ? ' ' + v.year : ''}`.trim(),
-      amount: v.soldPrice ?? 0,
-      date: v.soldDate!,
-      paid: true,
-      vehicleId: v.id,
-    }));
+      amount: v.soldPrice ?? 0, date: v.soldDate!, paid: true, vehicleId: v.id,
+    });
+    if ((v.purchasePrice ?? 0) > 0) {
+      movements.push({
+        key: `costo-${v.id}`, source: 'costo', type: 'egreso', category: 'costo_vehiculo',
+        description: `Costo de compra · ${v.brand} ${v.model}`,
+        amount: v.purchasePrice, date: v.soldDate!, paid: true, vehicleId: v.id,
+      });
+    }
+  }
+  // Transacciones manuales de Finanzas
+  for (const t of transactions) {
+    movements.push({
+      key: `tx-${t.id}`, source: 'tx', type: t.type, category: t.category, description: t.description,
+      amount: t.amount, date: t.date, paid: t.type === 'ingreso' ? true : (t.paid ?? true), paidDate: t.paidDate, txId: t.id,
+    });
+  }
+  // Gastos variables (gastos de vehículos / proveedores)
+  for (const e of expenses) {
+    movements.push({
+      key: `gasto-${e.id}`, source: 'gasto', type: 'egreso', category: e.category,
+      description: e.description, amount: e.amount, date: e.date, paid: e.paid, paidDate: e.paidDate, vehicleId: e.vehicleId,
+    });
+  }
+  // Gastos fijos del mes
+  for (const r of fixedExpenseRecords) {
+    movements.push({
+      key: `fijo-${r.id}`, source: 'fijo', type: 'egreso', category: 'gasto_fijo',
+      description: r.typeName, amount: r.amount, date: r.dueDate || `${r.month}-01`, paid: r.paid, paidDate: r.paidDate,
+    });
+  }
+  // Impuestos pagados
+  for (const t of taxPayments.filter((t) => t.paid && t.paidDate)) {
+    movements.push({
+      key: `imp-${t.id}`, source: 'impuesto', type: 'egreso', category: 'impuesto',
+      description: t.description, amount: t.amount, date: t.paidDate!, paid: true, paidDate: t.paidDate,
+    });
+  }
 
-  const allMovements = [...txMovements, ...saleMovements];
+  // Un egreso cuenta salvo que sea una transacción manual de Finanzas sin pagar
+  // (los gastos variables, fijos e impuestos cuentan igual que en Reportes).
+  const countsAsExpense = (m: Movement) => m.type === 'egreso' && !(m.source === 'tx' && !m.paid);
 
-  const filtered = allMovements
+  const filtered = movements
     .filter((m) => !monthFilter || m.date.startsWith(monthFilter))
     .filter((m) => !onlyPending || (m.type === 'egreso' && !m.paid))
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  const monthMovements = allMovements.filter((m) => !monthFilter || m.date.startsWith(monthFilter));
+  const monthMovements = movements.filter((m) => !monthFilter || m.date.startsWith(monthFilter));
   const monthIncome = monthMovements.filter((m) => m.type === 'ingreso').reduce((a, m) => a + m.amount, 0);
-  // Solo los egresos ya pagados descuentan del balance. Los pendientes se muestran aparte.
-  const paidExpense = monthMovements.filter((m) => m.type === 'egreso' && m.paid).reduce((a, m) => a + m.amount, 0);
+  const monthExpense = monthMovements.filter(countsAsExpense).reduce((a, m) => a + m.amount, 0);
+  const monthUtilidad = monthIncome - monthExpense;
   const pendingExpense = monthMovements.filter((m) => m.type === 'egreso' && !m.paid).reduce((a, m) => a + m.amount, 0);
-  const monthBalance = monthIncome - paidExpense;
   const pendingCount = monthMovements.filter((m) => m.type === 'egreso' && !m.paid).length;
 
-  // Chart data (incluye ventas de vehículos en los ingresos)
+  // Chart data — mismo criterio comprehensivo, por mes
   const chartData = Array.from({ length: 6 }, (_, i) => {
     const d = new Date();
     d.setMonth(d.getMonth() - (5 - i));
     const m = d.toISOString().slice(0, 7);
     const label = d.toLocaleString('es-AR', { month: 'short' });
-    const ingresosTx = transactions.filter((t) => t.type === 'ingreso' && t.date.startsWith(m)).reduce((a, t) => a + t.amount, 0);
-    const ingresosVentas = vehicles
-      .filter((v) => v.status === 'vendido' && v.soldDate?.startsWith(m))
-      .reduce((a, v) => a + (v.soldPrice ?? 0), 0);
-    const egresos = transactions.filter((t) => t.type === 'egreso' && t.date.startsWith(m)).reduce((a, t) => a + t.amount, 0);
-    return { mes: label, Ingresos: Math.round((ingresosTx + ingresosVentas) / 1000), Egresos: Math.round(egresos / 1000) };
+    const mov = movements.filter((x) => x.date.startsWith(m));
+    const ingresos = mov.filter((x) => x.type === 'ingreso').reduce((a, x) => a + x.amount, 0);
+    const egresos = mov.filter(countsAsExpense).reduce((a, x) => a + x.amount, 0);
+    return { mes: label, Ingresos: Math.round(ingresos / 1000), Egresos: Math.round(egresos / 1000) };
   });
 
   const categories = form.type === 'ingreso' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
-  // ── Disponibilidad (snapshot total, no depende del mes) ────────────────────
-  // "Disponible" = plata líquida estimada (efectivo, transferencia, prendario, cuotas
-  // cobradas, cheques cobrados y señas) neta de egresos pagados. "En cheques" = cheques
-  // en cartera, que pasan a disponible recién al cobrarse. Se complementan entre sí.
-  const isLiquid = (m: string) => LIQUID_METHODS.includes(m as never);
+  // ── Disponibilidad (snapshot total de caja, no depende del mes) ────────────
+  // Plata líquida que entró menos la que salió (de lo registrado). No descuenta la
+  // compra del stock que no esté cargada como egreso. "En cheques" = cartera.
+  const isLiquid = (m?: string) => !!m && LIQUID_METHODS.includes(m as never);
 
   let saleLiquid = 0;
   for (const v of vehicles.filter((v) => v.status === 'vendido')) {
@@ -162,12 +181,21 @@ export function Finance() {
   }
   const collectedInstallments = installmentPayments.filter((p) => p.paid).reduce((a, p) => a + p.amount, 0);
   const manualIncome = transactions.filter((t) => t.type === 'ingreso').reduce((a, t) => a + t.amount, 0);
-  const activeSenasVenta = senas.filter((s) => s.type === 'venta' && s.status === 'activa' && isLiquid(s.method)).reduce((a, s) => a + s.amount, 0);
+  // Señas ahora viven en el vehículo: venta activa (señado) suma; compra resta.
+  const senaVentaActiva = vehicles
+    .filter((v) => v.status === 'señado' && v.senaType === 'venta' && (v.senaAmount ?? 0) > 0 && isLiquid(v.senaMethod))
+    .reduce((a, v) => a + (v.senaAmount ?? 0), 0);
+  const senaCompra = vehicles
+    .filter((v) => v.senaType === 'compra' && (v.senaAmount ?? 0) > 0 && isLiquid(v.senaMethod))
+    .reduce((a, v) => a + (v.senaAmount ?? 0), 0);
   const chequesCobrados = cheques.filter((c) => c.moneda === 'ARS' && c.estado === 'cobrado').reduce((a, c) => a + c.monto, 0);
   const manualPaidExpense = transactions.filter((t) => t.type === 'egreso' && t.paid !== false).reduce((a, t) => a + t.amount, 0);
-  const senasCompra = senas.filter((s) => s.type === 'compra' && s.status !== 'cancelada' && isLiquid(s.method)).reduce((a, s) => a + s.amount, 0);
+  const gastosVarPaid = expenses.filter((e) => e.paid).reduce((a, e) => a + e.amount, 0);
+  const gastosFijosPaid = fixedExpenseRecords.filter((r) => r.paid).reduce((a, r) => a + r.amount, 0);
+  const impuestosPaid = taxPayments.filter((t) => t.paid).reduce((a, t) => a + t.amount, 0);
 
-  const disponible = saleLiquid + collectedInstallments + manualIncome + activeSenasVenta + chequesCobrados - manualPaidExpense - senasCompra;
+  const disponible = saleLiquid + collectedInstallments + manualIncome + senaVentaActiva + chequesCobrados
+    - manualPaidExpense - gastosVarPaid - gastosFijosPaid - impuestosPaid - senaCompra;
 
   const chequesEnCarteraEstados = ['en_cartera', 'depositado'];
   const enChequesARS = cheques.filter((c) => c.moneda === 'ARS' && chequesEnCarteraEstados.includes(c.estado)).reduce((a, c) => a + c.monto, 0);
@@ -261,7 +289,7 @@ export function Finance() {
             <div>
               <p className="text-xs text-slate-500 font-medium">Ingresos</p>
               <p className="text-xl font-bold text-green-700">{formatCurrency(monthIncome)}</p>
-              <p className="text-[11px] text-slate-400">incluye ventas de vehículos</p>
+              <p className="text-[11px] text-slate-400">ventas + ingresos de finanzas</p>
             </div>
           </div>
         </Card>
@@ -271,24 +299,24 @@ export function Finance() {
               <TrendingDown size={20} className="text-red-600" />
             </div>
             <div>
-              <p className="text-xs text-slate-500 font-medium">Egresos pagados</p>
-              <p className="text-xl font-bold text-red-700">{formatCurrency(paidExpense)}</p>
+              <p className="text-xs text-slate-500 font-medium">Egresos</p>
+              <p className="text-xl font-bold text-red-700">{formatCurrency(monthExpense)}</p>
               <p className="text-[11px] text-slate-400">
-                {pendingExpense > 0
-                  ? <span className="text-amber-600 font-medium">+ {formatCurrency(pendingExpense)} pendiente (no descontado)</span>
-                  : 'todo pagado'}
+                gastos, impuestos y costo de autos vendidos
+                {pendingExpense > 0 && <span className="text-amber-600 font-medium"> · {formatCurrency(pendingExpense)} pendiente</span>}
               </p>
             </div>
           </div>
         </Card>
-        <Card className={monthBalance >= 0 ? 'bg-blue-50' : 'bg-red-50'}>
+        <Card className={monthUtilidad >= 0 ? 'bg-blue-50' : 'bg-red-50'}>
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-xl ${monthBalance >= 0 ? 'bg-blue-100' : 'bg-red-100'}`}>
-              <DollarSign size={20} className={monthBalance >= 0 ? 'text-brand-600' : 'text-red-600'} />
+            <div className={`p-2 rounded-xl ${monthUtilidad >= 0 ? 'bg-blue-100' : 'bg-red-100'}`}>
+              <DollarSign size={20} className={monthUtilidad >= 0 ? 'text-brand-600' : 'text-red-600'} />
             </div>
             <div>
-              <p className="text-xs text-slate-500 font-medium">Balance neto</p>
-              <p className={`text-xl font-bold ${monthBalance >= 0 ? 'text-brand-600' : 'text-red-700'}`}>{formatCurrency(monthBalance)}</p>
+              <p className="text-xs text-slate-500 font-medium">Utilidad neta</p>
+              <p className={`text-xl font-bold ${monthUtilidad >= 0 ? 'text-brand-600' : 'text-red-700'}`}>{formatCurrency(monthUtilidad)}</p>
+              <p className="text-[11px] text-slate-400">igual que Reportes</p>
             </div>
           </div>
         </Card>
@@ -329,13 +357,14 @@ export function Finance() {
           <div className="divide-y divide-slate-100">
             {filtered.map((m) => {
               const isPendingExpense = m.type === 'egreso' && !m.paid;
+              const isAuto = m.source !== 'tx';
               return (
                 <div key={m.key} className={`flex items-center gap-4 px-6 py-3 hover:bg-slate-50 ${isPendingExpense ? 'border-l-2 border-amber-400' : ''}`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                     m.type === 'ingreso' ? 'bg-green-100' : 'bg-red-100'
                   }`}>
-                    {m.source === 'venta'
-                      ? <Car size={14} className="text-green-600" />
+                    {m.source === 'venta' || m.source === 'costo'
+                      ? <Car size={14} className={m.type === 'ingreso' ? 'text-green-600' : 'text-red-600'} />
                       : m.type === 'ingreso'
                         ? <TrendingUp size={14} className="text-green-600" />
                         : <TrendingDown size={14} className="text-red-600" />
@@ -343,28 +372,28 @@ export function Finance() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-900 flex items-center gap-2">
-                      {m.description}
-                      {m.source === 'venta' && (
-                        <span className="text-[10px] uppercase tracking-wide bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">Automático</span>
+                      <span className="truncate">{m.description}</span>
+                      {isAuto && (
+                        <span className="text-[10px] uppercase tracking-wide bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{sourceTag[m.source]}</span>
                       )}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {categoryLabel[m.category] ?? m.category} · {formatDate(m.date)}
+                      {formatDate(m.date)}
                       {m.type === 'egreso' && (
                         m.paid
                           ? <span className="text-green-600"> · Pagado{m.paidDate ? ` el ${formatDate(m.paidDate)}` : ''}</span>
-                          : <span className="text-amber-600 font-medium"> · Pendiente de pago</span>
+                          : <span className="text-amber-600 font-medium"> · Pendiente</span>
                       )}
                     </p>
                   </div>
 
-                  {/* Estado / acción de pago para egresos manuales */}
+                  {/* Acción de pago solo para egresos manuales de Finanzas */}
                   {m.type === 'egreso' && m.source === 'tx' && (
                     m.paid
                       ? (
                         <button
                           onClick={() => markTransactionPaid(m.txId!, false)}
-                          className="flex items-center gap-1 text-xs text-green-600 hover:text-amber-600 transition-colors"
+                          className="flex items-center gap-1 text-xs text-green-600 hover:text-amber-600 transition-colors flex-shrink-0"
                           title="Marcar como pendiente"
                         >
                           <CheckCircle size={15} /> Pagado
@@ -377,22 +406,24 @@ export function Finance() {
                       )
                   )}
 
-                  <span className={`text-sm font-bold ${m.type === 'ingreso' ? 'text-green-700' : 'text-red-700'}`}>
+                  <span className={`text-sm font-bold flex-shrink-0 ${m.type === 'ingreso' ? 'text-green-700' : 'text-red-700'}`}>
                     {m.type === 'ingreso' ? '+' : '-'}{formatCurrency(m.amount)}
                   </span>
 
-                  {m.source === 'venta' ? (
+                  {m.source === 'tx' ? (
+                    <button onClick={() => deleteTransaction(m.txId!)} className="text-slate-300 hover:text-red-500 transition-colors flex-shrink-0" title="Eliminar">
+                      <Trash2 size={14} />
+                    </button>
+                  ) : m.vehicleId ? (
                     <button
                       onClick={() => navigate(`/vehiculos/${m.vehicleId}`)}
-                      className="text-slate-300 hover:text-brand-600 transition-colors"
+                      className="text-slate-300 hover:text-brand-600 transition-colors flex-shrink-0"
                       title="Ver vehículo"
                     >
                       <Car size={14} />
                     </button>
                   ) : (
-                    <button onClick={() => deleteTransaction(m.txId!)} className="text-slate-300 hover:text-red-500 transition-colors" title="Eliminar">
-                      <Trash2 size={14} />
-                    </button>
+                    <span className="w-3.5 flex-shrink-0" />
                   )}
                 </div>
               );

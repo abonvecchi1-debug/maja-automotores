@@ -24,7 +24,7 @@ const emptyChequeDraft = (): ChequeDraft => ({
 export function ClientDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { clients, sales, installmentPayments, vehicles, senas, addSale, markInstallmentPaid, updateClient, deleteClient, updateVehicle, updateSena } = useStore();
+  const { clients, sales, installmentPayments, vehicles, addSale, markInstallmentPaid, updateClient, deleteClient, updateVehicle } = useStore();
 
   const client = clients.find((c) => c.id === id);
   const clientSales = sales.filter((s) => s.clientId === id);
@@ -82,7 +82,7 @@ export function ClientDetail() {
   const totalPending = clientPayments.filter((p) => !p.paid).reduce((a, p) => a + p.amount, 0);
   const overduePayments = clientPayments.filter((p) => !p.paid && p.dueDate < today);
 
-  const availableVehicles = vehicles.filter((v) => v.status === 'publicado');
+  const availableVehicles = vehicles.filter((v) => v.status === 'publicado' || v.status === 'señado');
 
   const openEditModal = () => {
     setEditForm({
@@ -178,13 +178,6 @@ export function ClientDetail() {
       chequeDrafts,
     );
 
-    // Si se aplicó una seña, marcar las señas activas de este vehículo como aplicadas
-    if (saleForm.senaAplicada > 0) {
-      senas
-        .filter((s) => s.type === 'venta' && s.status === 'activa' && s.vehicleId === saleForm.vehicleId)
-        .forEach((s) => updateSena(s.id, { status: 'aplicada' }));
-    }
-
     setShowSaleModal(false);
     resetSaleForm();
   };
@@ -196,10 +189,12 @@ export function ClientDetail() {
   const removeChequeDraft = (i: number) =>
     setSaleForm((f) => ({ ...f, cheques: f.cheques.filter((_, idx) => idx !== i) }));
 
-  // Seña activa de venta para el vehículo seleccionado (para sugerir aplicarla)
-  const activeSenaForVehicle = senas.find(
-    (s) => s.type === 'venta' && s.status === 'activa' && s.vehicleId === saleForm.vehicleId
-  );
+  // Seña del vehículo seleccionado (si está señado por un comprador) para sugerir aplicarla
+  const selectedVehicle = vehicles.find((v) => v.id === saleForm.vehicleId);
+  const activeSenaForVehicle =
+    selectedVehicle?.status === 'señado' && selectedVehicle.senaType === 'venta' && (selectedVehicle.senaAmount ?? 0) > 0
+      ? { amount: selectedVehicle.senaAmount ?? 0 }
+      : null;
 
   const chequesDraftTotal = saleForm.cheques.reduce((a, c) => a + (c.monto || 0), 0);
   const assignedTotal =

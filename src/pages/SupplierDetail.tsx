@@ -1,18 +1,55 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Car, CheckCircle, Clock, Trash2 } from 'lucide-react';
+import { ArrowLeft, Car, CheckCircle, Clock, Trash2, Plus } from 'lucide-react';
 import { useStore } from '../store';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
+import { Modal } from '../components/ui/Modal';
+import { Input, Textarea } from '../components/ui/Input';
+import { Select } from '../components/ui/Select';
 import { formatCurrency, formatDate, supplierTypeLabel, supplierTypeColor, vehicleLabel } from '../utils/formatters';
+
+const PURCHASE_CATEGORIES = [
+  { value: 'repuestos', label: 'Repuestos' },
+  { value: 'mecanica', label: 'Mecánica' },
+  { value: 'lavado', label: 'Lavado' },
+  { value: 'pintura', label: 'Pintura' },
+  { value: 'documentacion', label: 'Documentación / Gestoría' },
+  { value: 'otro', label: 'Otro' },
+];
 
 export function SupplierDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { suppliers, expenses, vehicles, deleteSupplier, markExpensePaid, deleteExpense } = useStore();
+  const { suppliers, expenses, vehicles, addExpense, deleteSupplier, markExpensePaid, deleteExpense } = useStore();
 
   const supplier = suppliers.find((s) => s.id === id);
   const works = expenses.filter((e) => e.supplierId === id).sort((a, b) => b.date.localeCompare(a.date));
+
+  const [showModal, setShowModal] = useState(false);
+  const emptyForm = {
+    description: '', amount: 0, date: new Date().toISOString().split('T')[0],
+    category: 'repuestos', vehicleId: '', paid: false, notes: '',
+  };
+  const [form, setForm] = useState(emptyForm);
+
+  const handleSavePurchase = () => {
+    if (!form.description || !form.amount) return;
+    addExpense({
+      description: form.description,
+      amount: form.amount,
+      date: form.date,
+      category: form.category,
+      supplierId: id!,
+      vehicleId: form.vehicleId || undefined,
+      paid: form.paid,
+      paidDate: form.paid ? form.date : undefined,
+      notes: form.notes,
+    });
+    setShowModal(false);
+    setForm(emptyForm);
+  };
 
   if (!supplier) {
     return (
@@ -54,9 +91,14 @@ export function SupplierDetail() {
             <p className="text-slate-500 text-sm mt-0.5">{works.length} trabajos registrados</p>
           </div>
         </div>
-        <Button variant="danger" size="sm" onClick={handleDelete}>
-          <Trash2 size={14} />
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => { setForm(emptyForm); setShowModal(true); }}>
+            <Plus size={16} /> Registrar compra
+          </Button>
+          <Button variant="danger" size="sm" onClick={handleDelete}>
+            <Trash2 size={14} />
+          </Button>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -83,7 +125,7 @@ export function SupplierDetail() {
         <div className="xl:col-span-2">
           <Card padding={false}>
             <div className="px-6 py-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-900">Historial de trabajos</h3>
+              <h3 className="font-semibold text-slate-900">Historial de compras y trabajos</h3>
             </div>
             {works.length > 0 ? (
               <div className="divide-y divide-slate-100">
@@ -131,7 +173,12 @@ export function SupplierDetail() {
                 })}
               </div>
             ) : (
-              <p className="px-6 py-8 text-center text-slate-400 text-sm">Sin trabajos registrados</p>
+              <div className="px-6 py-8 text-center">
+                <p className="text-slate-400 text-sm">Sin compras registradas todavía.</p>
+                <Button variant="outline" className="mt-3" onClick={() => { setForm(emptyForm); setShowModal(true); }}>
+                  <Plus size={14} /> Registrar primera compra
+                </Button>
+              </div>
             )}
           </Card>
         </div>
@@ -182,6 +229,57 @@ export function SupplierDetail() {
           )}
         </div>
       </div>
+
+      {/* Registrar compra modal */}
+      <Modal
+        isOpen={showModal}
+        onClose={() => { setShowModal(false); setForm(emptyForm); }}
+        title={`Registrar compra · ${supplier.name}`}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => { setShowModal(false); setForm(emptyForm); }}>Cancelar</Button>
+            <Button onClick={handleSavePurchase}>Guardar</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="¿Qué le compraste / qué trabajo hizo?"
+            value={form.description}
+            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            placeholder="Ej: Juego de pastillas de freno / Service completo"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input label="Monto ($)" type="number" value={form.amount}
+              onChange={(e) => setForm((f) => ({ ...f, amount: +e.target.value }))} />
+            <Input label="Fecha" type="date" value={form.date}
+              onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
+          </div>
+          <Select
+            label="Categoría" value={form.category}
+            onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+            options={PURCHASE_CATEGORIES}
+          />
+          <Select
+            label="Vehículo asociado (opcional)"
+            value={form.vehicleId}
+            onChange={(e) => setForm((f) => ({ ...f, vehicleId: e.target.value }))}
+            options={vehicles.map((v) => ({ value: v.id, label: `${vehicleLabel(v.brand, v.model, v.year)} — ${v.patent}` }))}
+            placeholder="Sin vehículo asociado"
+          />
+          <Textarea label="Notas (opcional)" value={form.notes}
+            onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+            placeholder="Observaciones..." />
+          <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+            <input type="checkbox" checked={form.paid}
+              onChange={(e) => setForm((f) => ({ ...f, paid: e.target.checked }))} />
+            Ya está pagado
+          </label>
+          <p className="text-[11px] text-slate-400">
+            Si lo dejás sin pagar, se suma a la deuda con el proveedor. Después podés tocar "Pagar" cuando lo saldes.
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 }

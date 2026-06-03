@@ -24,6 +24,11 @@ const map = (r) => ({
   soldToClientId: r.sold_to_client_id ?? undefined,
   saleId: r.sale_id ?? undefined,
   tradeInVehicleId: r.trade_in_vehicle_id ?? undefined,
+  senaAmount: r.sena_amount ?? undefined,
+  senaDate: r.sena_date ?? undefined,
+  senaType: r.sena_type ?? undefined,
+  senaClientId: r.sena_client_id ?? undefined,
+  senaMethod: r.sena_method ?? undefined,
   checklist: JSON.parse(r.checklist),
   documents: JSON.parse(r.documents),
   images: JSON.parse(r.images),
@@ -45,14 +50,16 @@ router.post('/', (req, res) => {
   db.prepare(`
     INSERT INTO vehicles (id,brand,model,year,km,color,patent,status,purchase_price,publish_price,
       sold_price,usd_price,purchase_date,sold_date,sold_to_client_id,sale_id,trade_in_vehicle_id,
+      sena_amount,sena_date,sena_type,sena_client_id,sena_method,
       checklist,documents,images,publish_links,price_history,notes,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     id, v.brand, v.model, v.year, v.km, v.color, v.patent, v.status,
     v.purchasePrice, v.publishPrice,
     v.soldPrice ?? null, v.usdPrice ?? null,
     v.purchaseDate, v.soldDate ?? null, v.soldToClientId ?? null, v.saleId ?? null,
     v.tradeInVehicleId ?? null,
+    v.senaAmount ?? null, v.senaDate ?? null, v.senaType ?? null, v.senaClientId ?? null, v.senaMethod ?? null,
     JSON.stringify(v.checklist ?? { lavado: false, pulido: false, mecanica: false, papeles: false }),
     JSON.stringify(v.documents ?? { titulo: false, cedulaVerde: false, cedulaAzul: false, vtv: false, libreDeuda: false, verificacionPolicial: false, seguro: false }),
     JSON.stringify(v.images ?? []),
@@ -72,6 +79,7 @@ router.put('/:id', (req, res) => {
     UPDATE vehicles SET brand=?,model=?,year=?,km=?,color=?,patent=?,status=?,
       purchase_price=?,publish_price=?,sold_price=?,usd_price=?,purchase_date=?,
       sold_date=?,sold_to_client_id=?,sale_id=?,trade_in_vehicle_id=?,
+      sena_amount=?,sena_date=?,sena_type=?,sena_client_id=?,sena_method=?,
       checklist=?,documents=?,images=?,publish_links=?,price_history=?,notes=?
     WHERE id=?
   `).run(
@@ -86,6 +94,11 @@ router.put('/:id', (req, res) => {
     v.soldToClientId !== undefined ? v.soldToClientId : existing.sold_to_client_id,
     v.saleId !== undefined ? v.saleId : existing.sale_id,
     v.tradeInVehicleId !== undefined ? v.tradeInVehicleId : existing.trade_in_vehicle_id,
+    v.senaAmount !== undefined ? v.senaAmount : existing.sena_amount,
+    v.senaDate !== undefined ? v.senaDate : existing.sena_date,
+    v.senaType !== undefined ? v.senaType : existing.sena_type,
+    v.senaClientId !== undefined ? v.senaClientId : existing.sena_client_id,
+    v.senaMethod !== undefined ? v.senaMethod : existing.sena_method,
     v.checklist ? JSON.stringify(v.checklist) : existing.checklist,
     v.documents ? JSON.stringify(v.documents) : existing.documents,
     v.images ? JSON.stringify(v.images) : existing.images,

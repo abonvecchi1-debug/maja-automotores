@@ -83,6 +83,7 @@ export const statusLabel: Record<string, string> = {
   comprado: 'Comprado',
   preparacion: 'En Preparación',
   publicado: 'Publicado',
+  señado: 'Señado',
   vendido: 'Vendido',
 };
 
@@ -90,6 +91,7 @@ export const statusColor: Record<string, string> = {
   comprado: 'bg-slate-100 text-slate-700',
   preparacion: 'bg-amber-100 text-amber-800',
   publicado: 'bg-blue-100 text-blue-800',
+  señado: 'bg-purple-100 text-purple-800',
   vendido: 'bg-green-100 text-green-800',
 };
 
