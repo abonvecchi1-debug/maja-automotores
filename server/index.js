@@ -27,6 +27,7 @@ import dataRoutes from './routes/data.js';
 import creditsRoutes from './routes/credits.js';
 import reportsRoutes from './routes/reports.js';
 import chequesRoutes from './routes/cheques.js';
+import senasRoutes from './routes/senas.js';
 import syncRoutes from './routes/sync.js';
 import publicRoutes from './routes/public.js';
 import { start as startSync } from './sync-service.js';
@@ -79,6 +80,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/credits', creditsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/cheques', chequesRoutes);
+app.use('/api/senas', senasRoutes);
 app.use('/api/sync', syncRoutes);
 
 app.get('/api/health', (req, res) => {

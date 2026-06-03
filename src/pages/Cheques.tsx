@@ -1,40 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Plus, Pencil, Trash2, FileDown, TableIcon, X, ChevronDown, AlertTriangle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-
-const TOKEN_KEY = 'maja-auth-token';
-const getToken = () => localStorage.getItem(TOKEN_KEY);
+import { useStore } from '../store';
+import type { Cheque } from '../types';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
 type Estado = 'en_cartera' | 'depositado' | 'entregado' | 'cobrado' | 'rechazado';
 type Tipo = 'al_dia' | 'diferido';
 type Moneda = 'ARS' | 'USD';
-
-interface Cheque {
-  id: string;
-  numero: string;
-  serie: string;
-  banco: string;
-  monto: number;
-  moneda: Moneda;
-  fechaEmision: string;
-  fechaVencimiento: string;
-  tipo: Tipo;
-  alPortador: boolean;
-  endosado: boolean;
-  endosadoPor: string;
-  dniEndosante: string;
-  librador: string;
-  cuitLibrador: string;
-  recibidoDe: string;
-  entregadoA: string;
-  estado: Estado;
-  observaciones: string;
-  createdAt: string;
-}
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -358,8 +334,8 @@ function exportExcel(cheques: Cheque[]) {
 /* ─── Main page ──────────────────────────────────────────────────────────── */
 
 export function Cheques() {
-  const [cheques, setCheques] = useState<Cheque[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { cheques, addCheque, updateCheque, deleteCheque } = useStore();
+  const loading = false;
   const [modal, setModal] = useState<{ open: boolean; editing: Cheque | null }>({ open: false, editing: null });
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -373,41 +349,15 @@ export function Cheques() {
   const [filtroDesde, setFiltroDesde] = useState('');
   const [filtroHasta, setFiltroHasta] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/cheques', { headers: { Authorization: `Bearer ${getToken()}` } });
-      const data = await res.json();
-      setCheques(data.cheques || []);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function save(data: Omit<Cheque, 'id' | 'createdAt'>) {
+  function save(data: Omit<Cheque, 'id' | 'createdAt'>) {
     const editing = modal.editing;
-    if (editing) {
-      await fetch(`/api/cheques/${editing.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify(data),
-      });
-    } else {
-      await fetch('/api/cheques', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify(data),
-      });
-    }
+    if (editing) updateCheque(editing.id, data);
+    else addCheque(data);
     setModal({ open: false, editing: null });
-    load();
   }
 
-  async function del(id: string) {
-    await fetch(`/api/cheques/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${getToken()}` } });
-    setCheques((p) => p.filter((c) => c.id !== id));
+  function del(id: string) {
+    deleteCheque(id);
     setDeleteId(null);
   }
 

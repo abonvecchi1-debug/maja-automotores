@@ -5,6 +5,7 @@ import type {
   Supplier, FixedExpenseType, FixedExpenseRecord,
   Task, Transaction, AppSettings,
   Transfer08, Lead, DailyCash, CashMovement, TaxPayment,
+  Cheque, Sena,
 } from '../types';
 
 // ─── Store Interface ───────────────────────────────────────────────────────
@@ -26,6 +27,8 @@ interface AppStore {
   dailyCashes: DailyCash[];
   cashMovements: CashMovement[];
   taxPayments: TaxPayment[];
+  cheques: Cheque[];
+  senas: Sena[];
 
   initialized: boolean;
   loading: boolean;
@@ -45,7 +48,7 @@ interface AppStore {
   updateClient: (id: string, data: Partial<Client>) => void;
   deleteClient: (id: string) => void;
 
-  addSale: (s: Omit<Sale, 'id' | 'createdAt'>, payments: Omit<InstallmentPayment, 'id'>[]) => void;
+  addSale: (s: Omit<Sale, 'id' | 'createdAt'>, payments: Omit<InstallmentPayment, 'id'>[], cheques?: Omit<Cheque, 'id' | 'createdAt'>[]) => void;
   markInstallmentPaid: (id: string) => void;
 
   addSupplier: (s: Omit<Supplier, 'id' | 'createdAt'>) => void;
@@ -88,6 +91,14 @@ interface AppStore {
   updateTaxPayment: (id: string, data: Partial<TaxPayment>) => void;
   deleteTaxPayment: (id: string) => void;
   markTaxPaid: (id: string) => void;
+
+  addCheque: (c: Omit<Cheque, 'id' | 'createdAt'>) => void;
+  updateCheque: (id: string, data: Partial<Cheque>) => void;
+  deleteCheque: (id: string) => void;
+
+  addSena: (s: Omit<Sena, 'id' | 'createdAt'>) => void;
+  updateSena: (id: string, data: Partial<Sena>) => void;
+  deleteSena: (id: string) => void;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -110,7 +121,7 @@ export const useStore = create<AppStore>((set, get) => ({
   vehicles: [], expenses: [], clients: [], sales: [], installmentPayments: [],
   suppliers: [], fixedExpenseTypes: [], fixedExpenseRecords: [], tasks: [],
   transactions: [], transfers: [], leads: [], dailyCashes: [], cashMovements: [],
-  taxPayments: [],
+  taxPayments: [], cheques: [], senas: [],
   settings: { iibbRate: 3, province: 'Buenos Aires', businessName: 'Maja Automotores', cuit: '', currency: 'ARS' },
   initialized: false,
   loading: false,
@@ -138,6 +149,8 @@ export const useStore = create<AppStore>((set, get) => ({
         dailyCashes: data.dailyCashes ?? [],
         cashMovements: data.cashMovements ?? [],
         taxPayments: data.taxPayments ?? [],
+        cheques: data.cheques ?? [],
+        senas: data.senas ?? [],
         settings: data.settings ?? get().settings,
         initialized: true,
         loading: false,
@@ -232,24 +245,27 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   // ── Sales ──────────────────────────────────────────────────────────────
-  addSale: (s, payments) => {
+  addSale: (s, payments, cheques = []) => {
     const saleId = uid();
     const newSale: Sale = { ...s, id: saleId, createdAt: now() };
     const newPayments: InstallmentPayment[] = payments.map((p) => ({ ...p, id: uid(), saleId }));
+    const newCheques: Cheque[] = cheques.map((c) => ({ ...c, id: uid(), saleId, createdAt: now() }));
     set((st) => ({
       sales: [...st.sales, newSale],
       installmentPayments: [...st.installmentPayments, ...newPayments],
+      cheques: [...st.cheques, ...newCheques],
       vehicles: st.vehicles.map((v) =>
         v.id === s.vehicleId ? { ...v, status: 'vendido' as const, soldPrice: s.salePrice, soldDate: s.saleDate, soldToClientId: s.clientId, saleId } : v
       ),
     }));
     sync(
-      () => authFetch('/api/sales', { method: 'POST', body: JSON.stringify({ sale: s, payments }) })
+      () => authFetch('/api/sales', { method: 'POST', body: JSON.stringify({ sale: s, payments, cheques }) })
         .then((r) => r.json())
-        .then(({ sale, payments: pms }) => {
+        .then(({ sale, payments: pms, cheques: chs }) => {
           set((st) => ({
             sales: st.sales.map((x) => x.id === saleId ? sale : x),
             installmentPayments: [...st.installmentPayments.filter((x) => !newPayments.find((p) => p.id === x.id)), ...pms],
+            cheques: [...st.cheques.filter((x) => !newCheques.find((c) => c.id === x.id)), ...(chs ?? [])],
           }));
         })
     );
@@ -513,5 +529,53 @@ export const useStore = create<AppStore>((set, get) => ({
   markTaxPaid: (id) => {
     set((s) => ({ taxPayments: s.taxPayments.map((t) => t.id === id ? { ...t, paid: true, paidDate: today() } : t) }));
     sync(() => authFetch(`/api/tax-payments/${id}/pay`, { method: 'PUT' }).then(() => {}));
+  },
+
+  // ── Cheques ────────────────────────────────────────────────────────────
+  addCheque: (c) => {
+    const tempId = uid();
+    set((s) => ({ cheques: [...s.cheques, { ...c, id: tempId, createdAt: now() }] }));
+    sync(
+      () => authFetch('/api/cheques', { method: 'POST', body: JSON.stringify(c) })
+        .then((r) => r.json())
+        .then(({ cheque }) => set((s) => ({ cheques: s.cheques.map((x) => x.id === tempId ? cheque : x) }))),
+      () => set((s) => ({ cheques: s.cheques.filter((x) => x.id !== tempId) }))
+    );
+  },
+  updateCheque: (id, data) => {
+    set((s) => ({ cheques: s.cheques.map((c) => c.id === id ? { ...c, ...data } : c) }));
+    sync(() => authFetch(`/api/cheques/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(() => {}));
+  },
+  deleteCheque: (id) => {
+    const prev = get().cheques;
+    set((s) => ({ cheques: s.cheques.filter((c) => c.id !== id) }));
+    sync(
+      () => authFetch(`/api/cheques/${id}`, { method: 'DELETE' }).then(() => {}),
+      () => set({ cheques: prev })
+    );
+  },
+
+  // ── Señas ──────────────────────────────────────────────────────────────
+  addSena: (s) => {
+    const tempId = uid();
+    set((st) => ({ senas: [...st.senas, { ...s, id: tempId, createdAt: now() }] }));
+    sync(
+      () => authFetch('/api/senas', { method: 'POST', body: JSON.stringify(s) })
+        .then((r) => r.json())
+        .then(({ sena }) => set((st) => ({ senas: st.senas.map((x) => x.id === tempId ? sena : x) }))),
+      () => set((st) => ({ senas: st.senas.filter((x) => x.id !== tempId) }))
+    );
+  },
+  updateSena: (id, data) => {
+    set((st) => ({ senas: st.senas.map((s) => s.id === id ? { ...s, ...data } : s) }));
+    sync(() => authFetch(`/api/senas/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(() => {}));
+  },
+  deleteSena: (id) => {
+    const prev = get().senas;
+    set((st) => ({ senas: st.senas.filter((s) => s.id !== id) }));
+    sync(
+      () => authFetch(`/api/senas/${id}`, { method: 'DELETE' }).then(() => {}),
+      () => set({ senas: prev })
+    );
   },
 }));

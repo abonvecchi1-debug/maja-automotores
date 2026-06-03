@@ -26,6 +26,7 @@ const map = (r) => ({
   entregadoA: r.entregado_a,
   estado: r.estado,
   observaciones: r.observaciones,
+  saleId: r.sale_id ?? undefined,
   createdAt: r.created_at,
 });
 

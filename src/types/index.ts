@@ -6,6 +6,25 @@ export type TaskStatus = 'pendiente' | 'en_proceso' | 'terminado';
 export type TaskPriority = 'baja' | 'media' | 'alta';
 export type PaymentType = 'contado' | 'financiado';
 
+// Medios con los que un cliente paga una venta (pueden combinarse varios).
+export type PaymentMethod =
+  | 'efectivo'
+  | 'transferencia'
+  | 'cheque'
+  | 'credito_prendario'
+  | 'parte_pago'   // auto entregado en parte de pago (no es plata líquida)
+  | 'sena';        // seña previa aplicada a la compra
+
+export interface SalePayment {
+  method: PaymentMethod;
+  amount: number;
+  reference?: string;  // entidad del prendario, banco, nota libre, etc.
+}
+
+// Métodos considerados "líquidos" para el cálculo de disponible (efectivo en mano / banco).
+// El cheque va a "en cheques" y parte de pago es stock, no plata.
+export const LIQUID_METHODS: PaymentMethod[] = ['efectivo', 'transferencia', 'credito_prendario', 'sena'];
+
 // ─── Vehicles ─────────────────────────────────────────────────────────────
 
 export interface Vehicle {
@@ -100,6 +119,7 @@ export interface Sale {
   invoiceNumber?: string;   // número de factura AFIP
   tradeInVehicleId?: string; // auto entregado en parte de pago
   tradeInValue?: number;    // valor asignado al auto de parte de pago
+  paymentMethods?: SalePayment[];  // desglose de medios de pago (efectivo, transferencia, cheque, etc.)
   notes: string;
   createdAt: string;
 }
@@ -280,6 +300,55 @@ export interface TaxPayment {
   dueDate: string;
   paid: boolean;
   paidDate?: string;
+  notes: string;
+  createdAt: string;
+}
+
+// ─── Cheques ──────────────────────────────────────────────────────────────
+
+export type ChequeEstado = 'en_cartera' | 'depositado' | 'entregado' | 'cobrado' | 'rechazado';
+export type ChequeTipo = 'al_dia' | 'diferido';
+export type ChequeMoneda = 'ARS' | 'USD';
+
+export interface Cheque {
+  id: string;
+  numero: string;
+  serie: string;
+  banco: string;
+  monto: number;
+  moneda: ChequeMoneda;
+  fechaEmision: string;
+  fechaVencimiento: string;
+  tipo: ChequeTipo;
+  alPortador: boolean;
+  endosado: boolean;
+  endosadoPor: string;
+  dniEndosante: string;
+  librador: string;
+  cuitLibrador: string;
+  recibidoDe: string;
+  entregadoA: string;
+  estado: ChequeEstado;
+  observaciones: string;
+  saleId?: string;        // si el cheque vino de una venta
+  createdAt: string;
+}
+
+// ─── Señas (reservas con depósito) ────────────────────────────────────────
+
+export type SenaType = 'venta' | 'compra';      // venta = cliente nos seña; compra = nosotros señamos
+export type SenaStatus = 'activa' | 'aplicada' | 'cancelada';
+
+export interface Sena {
+  id: string;
+  type: SenaType;
+  vehicleId?: string;
+  clientId?: string;          // para seña de venta
+  counterpartyName?: string;  // nombre libre (cliente o vendedor) si no hay ficha
+  amount: number;
+  method: PaymentMethod;      // cómo se pagó/cobró la seña
+  date: string;
+  status: SenaStatus;         // activa = vigente, aplicada = se completó la operación, cancelada = se cayó
   notes: string;
   createdAt: string;
 }

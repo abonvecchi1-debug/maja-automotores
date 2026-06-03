@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, TrendingUp, TrendingDown, DollarSign, Trash2, Car, CheckCircle, Clock } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, DollarSign, Trash2, Car, CheckCircle, Clock, Wallet, FileText } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useStore } from '../store';
+import { LIQUID_METHODS } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Modal } from '../components/ui/Modal';
@@ -66,7 +67,7 @@ type Movement = {
 };
 
 export function Finance() {
-  const { transactions, vehicles, addTransaction, deleteTransaction, markTransactionPaid } = useStore();
+  const { transactions, vehicles, sales, installmentPayments, cheques, senas, addTransaction, deleteTransaction, markTransactionPaid } = useStore();
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
@@ -142,6 +143,38 @@ export function Finance() {
 
   const categories = form.type === 'ingreso' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
+  // ── Disponibilidad (snapshot total, no depende del mes) ────────────────────
+  // "Disponible" = plata líquida estimada (efectivo, transferencia, prendario, cuotas
+  // cobradas, cheques cobrados y señas) neta de egresos pagados. "En cheques" = cheques
+  // en cartera, que pasan a disponible recién al cobrarse. Se complementan entre sí.
+  const isLiquid = (m: string) => LIQUID_METHODS.includes(m as never);
+
+  let saleLiquid = 0;
+  for (const v of vehicles.filter((v) => v.status === 'vendido')) {
+    const sale = sales.find((s) => s.id === v.saleId) ?? sales.find((s) => s.vehicleId === v.id);
+    if (sale?.paymentMethods?.length) {
+      saleLiquid += sale.paymentMethods.filter((p) => isLiquid(p.method)).reduce((a, p) => a + p.amount, 0);
+    } else if (sale) {
+      saleLiquid += sale.paymentType === 'financiado' ? (sale.downPayment ?? 0) : (sale.salePrice ?? v.soldPrice ?? 0);
+    } else {
+      saleLiquid += v.soldPrice ?? 0;
+    }
+  }
+  const collectedInstallments = installmentPayments.filter((p) => p.paid).reduce((a, p) => a + p.amount, 0);
+  const manualIncome = transactions.filter((t) => t.type === 'ingreso').reduce((a, t) => a + t.amount, 0);
+  const activeSenasVenta = senas.filter((s) => s.type === 'venta' && s.status === 'activa' && isLiquid(s.method)).reduce((a, s) => a + s.amount, 0);
+  const chequesCobrados = cheques.filter((c) => c.moneda === 'ARS' && c.estado === 'cobrado').reduce((a, c) => a + c.monto, 0);
+  const manualPaidExpense = transactions.filter((t) => t.type === 'egreso' && t.paid !== false).reduce((a, t) => a + t.amount, 0);
+  const senasCompra = senas.filter((s) => s.type === 'compra' && s.status !== 'cancelada' && isLiquid(s.method)).reduce((a, s) => a + s.amount, 0);
+
+  const disponible = saleLiquid + collectedInstallments + manualIncome + activeSenasVenta + chequesCobrados - manualPaidExpense - senasCompra;
+
+  const chequesEnCarteraEstados = ['en_cartera', 'depositado'];
+  const enChequesARS = cheques.filter((c) => c.moneda === 'ARS' && chequesEnCarteraEstados.includes(c.estado)).reduce((a, c) => a + c.monto, 0);
+  const enChequesUSD = cheques.filter((c) => c.moneda === 'USD' && chequesEnCarteraEstados.includes(c.estado)).reduce((a, c) => a + c.monto, 0);
+  const enChequesCount = cheques.filter((c) => chequesEnCarteraEstados.includes(c.estado)).length;
+  const fmtUSD = (n: number) => 'U$S ' + n.toLocaleString('es-AR', { maximumFractionDigits: 0 });
+
   const handleSave = () => {
     if (!form.description || !form.amount) return;
     addTransaction({
@@ -170,6 +203,35 @@ export function Finance() {
         <Button onClick={() => setShowModal(true)}>
           <Plus size={16} /> Nuevo movimiento
         </Button>
+      </div>
+
+      {/* Disponibilidad (total, no depende del mes) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className={`sm:col-span-2 ${disponible >= 0 ? 'bg-brand-50' : 'bg-red-50'}`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl ${disponible >= 0 ? 'bg-brand-100' : 'bg-red-100'}`}>
+              <Wallet size={22} className={disponible >= 0 ? 'text-brand-600' : 'text-red-600'} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-slate-500 font-medium">Disponible (efectivo + banco)</p>
+              <p className={`text-2xl font-bold ${disponible >= 0 ? 'text-brand-700' : 'text-red-700'}`}>{formatCurrency(disponible)}</p>
+              <p className="text-[11px] text-slate-400">Estimado de plata líquida. No descuenta compras de vehículos que no estén cargadas en Finanzas.</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="bg-purple-50">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-purple-100 rounded-xl">
+              <FileText size={22} className="text-purple-600" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">En cheques (cartera)</p>
+              <p className="text-2xl font-bold text-purple-700">{formatCurrency(enChequesARS)}</p>
+              {enChequesUSD > 0 && <p className="text-xs font-semibold text-purple-600">+ {fmtUSD(enChequesUSD)}</p>}
+              <p className="text-[11px] text-slate-400">{enChequesCount} cheque{enChequesCount !== 1 ? 's' : ''} · pasan a disponible al cobrarse</p>
+            </div>
+          </div>
+        </Card>
       </div>
 
       {/* Month selector */}

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Car, AlertTriangle, CheckCircle, Plus, Edit2, Trash2, Cake, Link2 } from 'lucide-react';
+import { ArrowLeft, Car, AlertTriangle, CheckCircle, Plus, Edit2, Trash2, Cake, Link2, X } from 'lucide-react';
 import { useStore } from '../store';
+import type { SalePayment, Cheque } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Modal } from '../components/ui/Modal';
@@ -11,10 +12,19 @@ import { Badge } from '../components/ui/Badge';
 import { Textarea } from '../components/ui/Input';
 import { formatCurrency, formatDate, vehicleLabel } from '../utils/formatters';
 
+/** Borrador de cheque cargado dentro de una venta (se registra luego en el módulo Cheques). */
+type ChequeDraft = {
+  numero: string; banco: string; monto: number; moneda: 'ARS' | 'USD';
+  fechaVencimiento: string; tipo: 'al_dia' | 'diferido'; librador: string;
+};
+const emptyChequeDraft = (): ChequeDraft => ({
+  numero: '', banco: '', monto: 0, moneda: 'ARS', fechaVencimiento: '', tipo: 'diferido', librador: '',
+});
+
 export function ClientDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { clients, sales, installmentPayments, vehicles, addSale, markInstallmentPaid, updateClient, deleteClient, updateVehicle } = useStore();
+  const { clients, sales, installmentPayments, vehicles, senas, addSale, markInstallmentPaid, updateClient, deleteClient, updateVehicle, updateSena } = useStore();
 
   const client = clients.find((c) => c.id === id);
   const clientSales = sales.filter((s) => s.clientId === id);
@@ -36,6 +46,13 @@ export function ClientDetail() {
     salePrice: 0, paymentType: 'contado' as 'contado' | 'financiado',
     downPayment: 0, installments: 12, notes: '',
     invoiceNumber: '', tradeInVehicleId: '', tradeInValue: 0,
+    payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '',
+    senaAplicada: 0, cheques: [] as ChequeDraft[],
+  });
+  const resetSaleForm = () => setSaleForm({
+    vehicleId: '', saleDate: new Date().toISOString().split('T')[0], salePrice: 0, paymentType: 'contado',
+    downPayment: 0, installments: 12, notes: '', invoiceNumber: '', tradeInVehicleId: '', tradeInValue: 0,
+    payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '', senaAplicada: 0, cheques: [],
   });
   const [editForm, setEditForm] = useState({
     firstName: '', lastName: '', dni: '', cuit: '', phone: '', phone2: '',
@@ -124,6 +141,28 @@ export function ClientDetail() {
           };
         })
       : [];
+
+    // Desglose de medios de pago
+    const chequesTotal = saleForm.cheques.reduce((a, c) => a + (c.monto || 0), 0);
+    const paymentMethods: SalePayment[] = [];
+    if (saleForm.payEfectivo > 0) paymentMethods.push({ method: 'efectivo', amount: saleForm.payEfectivo });
+    if (saleForm.payTransferencia > 0) paymentMethods.push({ method: 'transferencia', amount: saleForm.payTransferencia });
+    if (saleForm.payPrendario > 0) paymentMethods.push({ method: 'credito_prendario', amount: saleForm.payPrendario, reference: saleForm.prendarioRef || undefined });
+    if (chequesTotal > 0) paymentMethods.push({ method: 'cheque', amount: chequesTotal });
+    if (saleForm.tradeInValue > 0) paymentMethods.push({ method: 'parte_pago', amount: saleForm.tradeInValue });
+    if (saleForm.senaAplicada > 0) paymentMethods.push({ method: 'sena', amount: saleForm.senaAplicada });
+
+    // Cheques recibidos → se crearán en el módulo Cheques (recibidoDe lo completa el server con el cliente)
+    const chequeDrafts: Omit<Cheque, 'id' | 'createdAt'>[] = saleForm.cheques
+      .filter((c) => c.numero || c.monto)
+      .map((c) => ({
+        numero: c.numero, serie: '', banco: c.banco, monto: c.monto, moneda: c.moneda,
+        fechaEmision: '', fechaVencimiento: c.fechaVencimiento, tipo: c.tipo,
+        alPortador: false, endosado: false, endosadoPor: '', dniEndosante: '',
+        librador: c.librador, cuitLibrador: '', recibidoDe: '', entregadoA: '',
+        estado: 'en_cartera', observaciones: 'Recibido por venta de vehículo',
+      }));
+
     addSale(
       {
         vehicleId: saleForm.vehicleId, clientId: id!, saleDate: saleForm.saleDate,
@@ -133,12 +172,40 @@ export function ClientDetail() {
         invoiceNumber: saleForm.invoiceNumber || undefined,
         tradeInVehicleId: saleForm.tradeInVehicleId || undefined,
         tradeInValue: saleForm.tradeInValue || undefined,
+        paymentMethods: paymentMethods.length ? paymentMethods : undefined,
       },
-      payments
+      payments,
+      chequeDrafts,
     );
+
+    // Si se aplicó una seña, marcar las señas activas de este vehículo como aplicadas
+    if (saleForm.senaAplicada > 0) {
+      senas
+        .filter((s) => s.type === 'venta' && s.status === 'activa' && s.vehicleId === saleForm.vehicleId)
+        .forEach((s) => updateSena(s.id, { status: 'aplicada' }));
+    }
+
     setShowSaleModal(false);
-    setSaleForm({ vehicleId: '', saleDate: new Date().toISOString().split('T')[0], salePrice: 0, paymentType: 'contado', downPayment: 0, installments: 12, notes: '', invoiceNumber: '', tradeInVehicleId: '', tradeInValue: 0 });
+    resetSaleForm();
   };
+
+  // Helpers de cheques-borrador dentro de la venta
+  const addChequeDraft = () => setSaleForm((f) => ({ ...f, cheques: [...f.cheques, emptyChequeDraft()] }));
+  const updateChequeDraft = (i: number, patch: Partial<ChequeDraft>) =>
+    setSaleForm((f) => ({ ...f, cheques: f.cheques.map((c, idx) => (idx === i ? { ...c, ...patch } : c)) }));
+  const removeChequeDraft = (i: number) =>
+    setSaleForm((f) => ({ ...f, cheques: f.cheques.filter((_, idx) => idx !== i) }));
+
+  // Seña activa de venta para el vehículo seleccionado (para sugerir aplicarla)
+  const activeSenaForVehicle = senas.find(
+    (s) => s.type === 'venta' && s.status === 'activa' && s.vehicleId === saleForm.vehicleId
+  );
+
+  const chequesDraftTotal = saleForm.cheques.reduce((a, c) => a + (c.monto || 0), 0);
+  const assignedTotal =
+    saleForm.payEfectivo + saleForm.payTransferencia + saleForm.payPrendario +
+    chequesDraftTotal + saleForm.tradeInValue + saleForm.senaAplicada;
+  const assignedRemainder = saleForm.salePrice - assignedTotal;
 
   const groupedByMonth = clientPayments.reduce((acc, p) => {
     const sale = clientSales.find((s) => s.id === p.saleId);
@@ -364,12 +431,12 @@ export function ClientDetail() {
       {/* Sale modal */}
       <Modal
         isOpen={showSaleModal}
-        onClose={() => setShowSaleModal(false)}
+        onClose={() => { setShowSaleModal(false); resetSaleForm(); }}
         title="Registrar venta"
         size="lg"
         footer={
           <>
-            <Button variant="outline" onClick={() => setShowSaleModal(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => { setShowSaleModal(false); resetSaleForm(); }}>Cancelar</Button>
             <Button onClick={handleAddSale}>Confirmar venta</Button>
           </>
         }
@@ -440,6 +507,100 @@ export function ClientDetail() {
                 value={saleForm.tradeInValue}
                 onChange={(e) => setSaleForm((f) => ({ ...f, tradeInValue: +e.target.value }))}
               />
+            )}
+          </div>
+
+          {/* Medios de pago */}
+          <div className="border border-brand-200 bg-brand-50/40 rounded-xl p-4 space-y-3">
+            <p className="text-sm font-semibold text-slate-700">Medios de pago</p>
+
+            {activeSenaForVehicle && saleForm.senaAplicada === 0 && (
+              <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs">
+                <span className="text-amber-800">
+                  Este vehículo tiene una seña activa de {formatCurrency(activeSenaForVehicle.amount)}.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSaleForm((f) => ({ ...f, senaAplicada: activeSenaForVehicle.amount }))}
+                  className="font-semibold text-amber-700 hover:underline"
+                >
+                  Aplicar seña
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input label="Efectivo ($)" type="number" value={saleForm.payEfectivo}
+                onChange={(e) => setSaleForm((f) => ({ ...f, payEfectivo: +e.target.value }))} />
+              <Input label="Transferencia ($)" type="number" value={saleForm.payTransferencia}
+                onChange={(e) => setSaleForm((f) => ({ ...f, payTransferencia: +e.target.value }))} />
+              <Input label="Crédito prendario ($)" type="number" value={saleForm.payPrendario}
+                onChange={(e) => setSaleForm((f) => ({ ...f, payPrendario: +e.target.value }))} />
+              <Input label="Entidad del prendario (opcional)" value={saleForm.prendarioRef}
+                onChange={(e) => setSaleForm((f) => ({ ...f, prendarioRef: e.target.value }))}
+                placeholder="Ej: Banco Nación" />
+              {saleForm.senaAplicada > 0 && (
+                <Input label="Seña aplicada ($)" type="number" value={saleForm.senaAplicada}
+                  onChange={(e) => setSaleForm((f) => ({ ...f, senaAplicada: +e.target.value }))} />
+              )}
+            </div>
+
+            {/* Cheques */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-600">
+                  Cheques {chequesDraftTotal > 0 && <span className="text-slate-400">· {formatCurrency(chequesDraftTotal)}</span>}
+                </span>
+                <button type="button" onClick={addChequeDraft}
+                  className="text-xs font-semibold text-brand-600 hover:underline inline-flex items-center gap-1">
+                  <Plus size={12} /> Agregar cheque
+                </button>
+              </div>
+              {saleForm.cheques.map((c, i) => (
+                <div key={i} className="border border-slate-200 bg-white rounded-lg p-3 space-y-2 relative">
+                  <button type="button" onClick={() => removeChequeDraft(i)}
+                    className="absolute top-2 right-2 text-slate-300 hover:text-red-500" title="Quitar cheque">
+                    <X size={14} />
+                  </button>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <Input label="N° cheque" value={c.numero} onChange={(e) => updateChequeDraft(i, { numero: e.target.value })} />
+                    <Input label="Banco" value={c.banco} onChange={(e) => updateChequeDraft(i, { banco: e.target.value })} />
+                    <Input label="Monto ($)" type="number" value={c.monto} onChange={(e) => updateChequeDraft(i, { monto: +e.target.value })} />
+                    <Input label="Vencimiento" type="date" value={c.fechaVencimiento} onChange={(e) => updateChequeDraft(i, { fechaVencimiento: e.target.value })} />
+                    <Input label="Librador" value={c.librador} onChange={(e) => updateChequeDraft(i, { librador: e.target.value })} />
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Tipo / Moneda</label>
+                      <div className="flex gap-2">
+                        <select value={c.tipo} onChange={(e) => updateChequeDraft(i, { tipo: e.target.value as 'al_dia' | 'diferido' })}
+                          className="flex-1 px-2 py-2 text-sm border border-slate-300 rounded-lg bg-white">
+                          <option value="al_dia">Al día</option>
+                          <option value="diferido">Diferido</option>
+                        </select>
+                        <select value={c.moneda} onChange={(e) => updateChequeDraft(i, { moneda: e.target.value as 'ARS' | 'USD' })}
+                          className="w-20 px-2 py-2 text-sm border border-slate-300 rounded-lg bg-white">
+                          <option value="ARS">ARS</option>
+                          <option value="USD">USD</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {saleForm.cheques.length > 0 && (
+                <p className="text-[11px] text-slate-400">Los cheques se registran automáticamente en el módulo Cheques (recibidos del cliente, en cartera).</p>
+              )}
+            </div>
+
+            {/* Resumen asignado vs precio */}
+            {saleForm.salePrice > 0 && (
+              <div className={`text-sm rounded-lg px-3 py-2 ${
+                Math.abs(assignedRemainder) < 1 ? 'bg-green-50 text-green-800'
+                  : assignedRemainder > 0 ? 'bg-slate-100 text-slate-700' : 'bg-red-50 text-red-700'
+              }`}>
+                Asignado: <span className="font-bold">{formatCurrency(assignedTotal)}</span> de {formatCurrency(saleForm.salePrice)}
+                {assignedRemainder > 0 && <span> · Resto {formatCurrency(assignedRemainder)} (financiado / pendiente)</span>}
+                {assignedRemainder < 0 && <span> · Te pasaste por {formatCurrency(-assignedRemainder)}</span>}
+              </div>
             )}
           </div>
 

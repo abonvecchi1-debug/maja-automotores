@@ -243,6 +243,20 @@ db.exec(`
     value TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS senas (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL DEFAULT 'venta',
+    vehicle_id TEXT,
+    client_id TEXT,
+    counterparty_name TEXT NOT NULL DEFAULT '',
+    amount REAL NOT NULL DEFAULT 0,
+    method TEXT NOT NULL DEFAULT 'efectivo',
+    date TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'activa',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS credit_campaigns (
     id TEXT PRIMARY KEY,
     titulo TEXT NOT NULL DEFAULT '',
@@ -292,6 +306,10 @@ try { db.exec(`ALTER TABLE clients ADD COLUMN birth_date TEXT`); } catch {}
 // Default 1 = los movimientos existentes quedan como "pagados" para no alterar balances previos.
 try { db.exec(`ALTER TABLE transactions ADD COLUMN paid INTEGER NOT NULL DEFAULT 1`); } catch {}
 try { db.exec(`ALTER TABLE transactions ADD COLUMN paid_date TEXT`); } catch {}
+// Desglose de medios de pago de una venta (JSON: [{method, amount, reference}])
+try { db.exec(`ALTER TABLE sales ADD COLUMN payment_methods TEXT NOT NULL DEFAULT '[]'`); } catch {}
+// Vínculo de un cheque con la venta que lo originó
+try { db.exec(`ALTER TABLE cheques ADD COLUMN sale_id TEXT`); } catch {}
 
 // Sync infrastructure
 db.exec(`
@@ -314,7 +332,7 @@ export const SYNCABLE_TABLES = [
   'suppliers', 'expenses', 'tasks', 'transactions',
   'transfers', 'leads', 'contact_history', 'daily_cashes', 'cash_movements',
   'fixed_expense_types', 'fixed_expense_records', 'tax_payments',
-  'credit_campaigns', 'cheques',
+  'credit_campaigns', 'cheques', 'senas',
 ];
 
 // Add updated_at column and auto-update triggers to every sync table

@@ -32,7 +32,8 @@ const mapSale = (r) => ({
   salePrice: r.sale_price, paymentType: r.payment_type, downPayment: r.down_payment,
   installments: r.installments, installmentAmount: r.installment_amount,
   invoiceNumber: n(r.invoice_number), tradeInVehicleId: n(r.trade_in_vehicle_id),
-  tradeInValue: n(r.trade_in_value), notes: r.notes, createdAt: r.created_at,
+  tradeInValue: n(r.trade_in_value), paymentMethods: j(r.payment_methods ?? '[]'),
+  notes: r.notes, createdAt: r.created_at,
 });
 const mapPayment = (r) => ({
   id: r.id, saleId: r.sale_id, installmentNumber: r.installment_number,
@@ -64,6 +65,7 @@ const mapTransaction = (r) => ({
   id: r.id, type: r.type, category: r.category, amount: r.amount,
   description: r.description, date: r.date,
   vehicleId: n(r.vehicle_id), clientId: n(r.client_id), supplierId: n(r.supplier_id),
+  paid: r.paid === 1, paidDate: n(r.paid_date),
   createdAt: r.created_at,
 });
 const mapTransfer = (r) => ({
@@ -92,6 +94,20 @@ const mapTax = (r) => ({
   id: r.id, type: r.type, description: r.description, month: r.month,
   amount: r.amount, dueDate: r.due_date, paid: bool(r.paid), paidDate: n(r.paid_date),
   notes: r.notes, createdAt: r.created_at,
+});
+const mapCheque = (r) => ({
+  id: r.id, numero: r.numero, serie: r.serie ?? '', banco: r.banco, monto: r.monto,
+  moneda: r.moneda, fechaEmision: r.fecha_emision, fechaVencimiento: r.fecha_vencimiento,
+  tipo: r.tipo, alPortador: bool(r.al_portador), endosado: bool(r.endosado),
+  endosadoPor: r.endosado_por ?? '', dniEndosante: r.dni_endosante ?? '',
+  librador: r.librador, cuitLibrador: r.cuit_librador, recibidoDe: r.recibido_de,
+  entregadoA: r.entregado_a, estado: r.estado, observaciones: r.observaciones,
+  saleId: n(r.sale_id), createdAt: r.created_at,
+});
+const mapSena = (r) => ({
+  id: r.id, type: r.type, vehicleId: n(r.vehicle_id), clientId: n(r.client_id),
+  counterpartyName: r.counterparty_name ?? '', amount: r.amount, method: r.method,
+  date: r.date, status: r.status, notes: r.notes, createdAt: r.created_at,
 });
 
 const SETTING_DEFAULTS = { iibbRate: 3, province: 'Buenos Aires', businessName: 'Maja Automotores', cuit: '', currency: 'ARS' };
@@ -127,6 +143,8 @@ router.get('/', (req, res) => {
     dailyCashes:          db.prepare('SELECT * FROM daily_cashes ORDER BY date DESC').all().map(mapDailyCash),
     cashMovements:        db.prepare('SELECT * FROM cash_movements ORDER BY created_at ASC').all().map(mapMovement),
     taxPayments:          db.prepare('SELECT * FROM tax_payments ORDER BY month DESC, due_date ASC').all().map(mapTax),
+    cheques:              db.prepare('SELECT * FROM cheques ORDER BY fecha_vencimiento ASC').all().map(mapCheque),
+    senas:                db.prepare('SELECT * FROM senas ORDER BY created_at DESC').all().map(mapSena),
     settings:             getSettings(),
   });
 });
