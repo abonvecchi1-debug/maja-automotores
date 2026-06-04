@@ -8,7 +8,8 @@ const http = require('http');
 const { pathToFileURL } = require('url');
 
 autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = false;
+// Si el usuario elige "Más tarde", la actualización se instala igual al cerrar la app.
+autoUpdater.autoInstallOnAppQuit = true;
 autoUpdater.logger = null;
 
 autoUpdater.on('update-downloaded', (info) => {
@@ -16,6 +17,7 @@ autoUpdater.on('update-downloaded', (info) => {
     type: 'info',
     title: 'Actualización lista',
     message: `Versión ${info.version} descargada. ¿Reiniciar para instalar?`,
+    detail: 'Si elegís "Más tarde", se instalará sola la próxima vez que cierres la app.',
     buttons: ['Reiniciar ahora', 'Más tarde'],
     defaultId: 0,
   }).then(({ response }) => {
@@ -26,6 +28,13 @@ autoUpdater.on('update-downloaded', (info) => {
 autoUpdater.on('error', (err) => {
   console.error('[updater]', err.message);
 });
+
+// Chequeo periódico de actualizaciones (cada 2 horas) para dispositivos que
+// dejan la app abierta mucho tiempo y nunca la reinician.
+function startUpdateChecks() {
+  autoUpdater.checkForUpdates().catch(() => {});
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 2 * 60 * 60 * 1000);
+}
 
 const PORT = 3001;
 let mainWindow = null;
@@ -131,7 +140,7 @@ async function createWindow() {
       });
     }
     if (app.isPackaged) {
-      setTimeout(() => autoUpdater.checkForUpdates(), 3000);
+      setTimeout(startUpdateChecks, 3000);
     }
   });
 }
