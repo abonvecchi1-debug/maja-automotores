@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Cloud, CloudOff, RefreshCw, Save, Check } from 'lucide-react';
+import { useStore } from '../store';
 
 const TOKEN_KEY = 'maja-auth-token';
 const getToken = () => localStorage.getItem(TOKEN_KEY);
@@ -32,6 +33,7 @@ export function SyncSettings() {
   const [syncing, setSyncing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const loadAll = useStore((s) => s.loadAll);
 
   async function loadConfig() {
     const res = await fetch('/api/sync/config', {
@@ -89,6 +91,7 @@ export function SyncSettings() {
       });
       const data = await res.json();
       if (!data.ok) setError(data.reason || 'Sin conexión');
+      else await loadAll(true);   // refrescar datos traídos por la sincronización
       await loadStatus();
     } catch (e: any) {
       setError(e.message);

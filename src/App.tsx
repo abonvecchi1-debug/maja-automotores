@@ -37,6 +37,23 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
     if (isAuthenticated && !initialized) loadAll();
   }, [isAuthenticated, initialized, loadAll]);
 
+  // Refresco en segundo plano: trae lo que llegó por sincronización desde otra
+  // computadora sin necesidad de reiniciar la app (cada 60s y al volver a la ventana).
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const refresh = () => {
+      if (document.visibilityState === 'visible') loadAll(true);
+    };
+    const interval = setInterval(refresh, 60_000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [isAuthenticated, loadAll]);
+
   return <>{children}</>;
 }
 

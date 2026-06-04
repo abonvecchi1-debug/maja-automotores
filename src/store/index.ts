@@ -33,7 +33,7 @@ interface AppStore {
   initialized: boolean;
   loading: boolean;
 
-  loadAll: () => Promise<void>;
+  loadAll: (silent?: boolean) => Promise<void>;
 
   addVehicle: (v: Omit<Vehicle, 'id' | 'createdAt'>) => void;
   updateVehicle: (id: string, data: Partial<Vehicle>) => void;
@@ -127,8 +127,10 @@ export const useStore = create<AppStore>((set, get) => ({
   loading: false,
 
   // ── Load all from server ───────────────────────────────────────────────
-  loadAll: async () => {
-    set({ loading: true });
+  // silent=true → refresco en segundo plano (no muestra spinner), para reflejar
+  // datos que llegaron por sincronización sin reiniciar la app.
+  loadAll: async (silent = false) => {
+    if (!silent) set({ loading: true });
     try {
       const res = await authFetch('/api/data');
       if (!res.ok) throw new Error('Failed to load data');
