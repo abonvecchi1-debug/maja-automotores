@@ -2,6 +2,7 @@ import express from 'express';
 import { randomUUID } from 'crypto';
 import db from '../db.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { createTradeInVehicle } from './vehicles.js';
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -54,11 +55,21 @@ router.get('/', (req, res) => {
 
 // Creates sale + installment payments + marks vehicle as sold, all in one transaction
 router.post('/', (req, res) => {
-  const { sale, payments, cheques } = req.body;
+  const { sale, payments, cheques, tradeIn } = req.body;
   const saleId = randomUUID();
   const now = new Date().toISOString();
+  let tradeInVehicleId = sale.tradeInVehicleId ?? null;
 
   const insertSale = db.transaction(() => {
+    // Auto recibido en parte de pago: se crea en stock (nuevo) o se marca el existente
+    if (tradeIn && tradeIn.type === 'new') {
+      tradeInVehicleId = createTradeInVehicle(tradeIn, { clientId: sale.clientId, sourceVehicleId: sale.vehicleId, date: sale.saleDate });
+    } else if (tradeIn && tradeIn.type === 'existing' && tradeIn.vehicleId) {
+      tradeInVehicleId = tradeIn.vehicleId;
+      db.prepare(`UPDATE vehicles SET acquired_as='parte_pago', trade_in_from_client_id=?, trade_in_source_vehicle_id=? WHERE id=?`)
+        .run(sale.clientId ?? null, sale.vehicleId, tradeIn.vehicleId);
+    }
+
     db.prepare(`
       INSERT INTO sales (id,vehicle_id,client_id,sale_date,sale_price,payment_type,down_payment,
         installments,installment_amount,invoice_number,trade_in_vehicle_id,trade_in_value,payment_methods,notes,created_at)
@@ -67,7 +78,7 @@ router.post('/', (req, res) => {
       saleId, sale.vehicleId, sale.clientId, sale.saleDate, sale.salePrice,
       sale.paymentType, sale.downPayment ?? 0, sale.installments ?? 0,
       sale.installmentAmount ?? 0, sale.invoiceNumber ?? null,
-      sale.tradeInVehicleId ?? null, sale.tradeInValue ?? null,
+      tradeInVehicleId, (tradeIn?.value ?? sale.tradeInValue) ?? null,
       JSON.stringify(sale.paymentMethods ?? []),
       sale.notes ?? '', now
     );
@@ -113,7 +124,7 @@ router.post('/', (req, res) => {
   const createdSale = mapSale(db.prepare('SELECT * FROM sales WHERE id = ?').get(sid));
   const createdPayments = paymentIds.map((pid) => mapPayment(db.prepare('SELECT * FROM installment_payments WHERE id = ?').get(pid)));
   const createdCheques = chequeIds.map((cid) => mapChequeRow(db.prepare('SELECT * FROM cheques WHERE id = ?').get(cid)));
-  res.status(201).json({ sale: createdSale, payments: createdPayments, cheques: createdCheques });
+  res.status(201).json({ sale: createdSale, payments: createdPayments, cheques: createdCheques, tradeInVehicleId });
 });
 
 router.put('/installments/:id/pay', (req, res) => {

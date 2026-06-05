@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, CheckSquare, Square, DollarSign, Wrench, Edit2, ImagePlus, X, UserPlus, HandCoins } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CheckSquare, Square, DollarSign, Wrench, Edit2, ImagePlus, X, UserPlus, HandCoins, RotateCcw, ArrowLeftRight } from 'lucide-react';
 import { useStore } from '../store';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -14,6 +14,7 @@ import {
   statusLabel, statusColor, supplierTypeLabel,
 } from '../utils/formatters';
 import { uploadVehicleImage } from '../utils/upload';
+import { TradeInSection, EMPTY_TRADEIN, toTradeInInput, type TradeInState } from '../components/TradeInSection';
 import type { VehicleStatus, PaymentMethod } from '../types';
 
 const SENA_METHODS: { value: PaymentMethod; label: string }[] = [
@@ -49,7 +50,7 @@ const INITIAL_EXPENSE = { description: '', amount: 0, date: new Date().toISOStri
 export function VehicleDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { vehicles, expenses, suppliers, clients, updateVehicle, deleteVehicle, addExpense, deleteExpense, markExpensePaid, addTransaction } = useStore();
+  const { vehicles, expenses, suppliers, clients, updateVehicle, deleteVehicle, addExpense, deleteExpense, markExpensePaid, addTransaction, sellVehicle, revertSale } = useStore();
 
   const vehicle = vehicles.find((v) => v.id === id);
   const vExpenses = expenses.filter((e) => e.vehicleId === id);
@@ -64,6 +65,7 @@ export function VehicleDetail() {
   const [assignBuyerId, setAssignBuyerId] = useState('');
   const [expenseForm, setExpenseForm] = useState(INITIAL_EXPENSE);
   const [sellForm, setSellForm] = useState({ soldPrice: 0, soldDate: new Date().toISOString().split('T')[0], clientId: '' });
+  const [sellTradeIn, setSellTradeIn] = useState<TradeInState>(EMPTY_TRADEIN);
   const [senaForm, setSenaForm] = useState({
     type: 'venta' as 'venta' | 'compra', amount: 0,
     date: new Date().toISOString().split('T')[0], clientId: '', method: 'efectivo' as PaymentMethod,
@@ -114,17 +116,24 @@ export function VehicleDetail() {
       soldDate: new Date().toISOString().split('T')[0],
       clientId: vehicle.senaClientId ?? '',
     });
+    setSellTradeIn(EMPTY_TRADEIN);
     setShowSellModal(true);
   };
 
   const handleSell = () => {
-    updateVehicle(id!, {
-      status: 'vendido',
+    sellVehicle(id!, {
       soldPrice: sellForm.soldPrice,
       soldDate: sellForm.soldDate,
-      ...(sellForm.clientId ? { soldToClientId: sellForm.clientId } : {}),
+      clientId: sellForm.clientId || undefined,
+      tradeIn: toTradeInInput(sellTradeIn),
     });
     setShowSellModal(false);
+  };
+
+  const handleRevertSale = () => {
+    if (confirm('¿Volver a poner este vehículo como disponible? Se va a deshacer la venta (y sus cuotas/cheques si tenía). El auto recibido en parte de pago queda en tu stock.')) {
+      revertSale(id!);
+    }
   };
 
   const openSenaModal = () => {
@@ -302,7 +311,7 @@ export function VehicleDetail() {
           })}
         </div>
         {vehicle.status === 'vendido' && (
-          <div className="mt-2">
+          <div className="mt-2 flex items-center justify-between gap-3 flex-wrap">
             {buyer ? (
               <p className="text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">
                 Vendido a <button onClick={() => navigate(`/clientes/${buyer.id}`)} className="font-semibold underline">{buyer.firstName} {buyer.lastName}</button>
@@ -316,6 +325,13 @@ export function VehicleDetail() {
                 <UserPlus size={13} /> Asignar comprador
               </button>
             )}
+            <button
+              onClick={handleRevertSale}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-600 bg-slate-100 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors"
+              title="Deshacer la venta y volver a disponible"
+            >
+              <RotateCcw size={13} /> Revertir venta
+            </button>
           </div>
         )}
 
@@ -553,6 +569,47 @@ export function VehicleDetail() {
             )}
           </Card>
 
+          {/* Trazabilidad de parte de pago */}
+          {(vehicle.acquiredAs === 'parte_pago' || vehicle.tradeInVehicleId) && (
+            <Card>
+              <p className="text-base font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                <ArrowLeftRight size={16} className="text-brand-600" /> Parte de pago
+              </p>
+              {vehicle.acquiredAs === 'parte_pago' && (() => {
+                const fromClient = clients.find((c) => c.id === vehicle.tradeInFromClientId);
+                const sourceVeh = vehicles.find((v) => v.id === vehicle.tradeInSourceVehicleId);
+                return (
+                  <div className="text-sm text-slate-600 space-y-1 mb-2">
+                    <p>
+                      Entró <span className="font-medium text-slate-900">en parte de pago</span>
+                      {fromClient && <> de <button onClick={() => navigate(`/clientes/${fromClient.id}`)} className="text-brand-600 hover:underline">{fromClient.firstName} {fromClient.lastName}</button></>}.
+                    </p>
+                    {sourceVeh && (
+                      <p className="text-xs text-slate-500">
+                        Cuando le vendiste{' '}
+                        <button onClick={() => navigate(`/vehiculos/${sourceVeh.id}`)} className="text-brand-600 hover:underline">
+                          {sourceVeh.brand} {sourceVeh.model} {sourceVeh.year}
+                        </button>.
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-500">Costo asignado: <span className="font-semibold text-slate-700">{formatCurrency(vehicle.purchasePrice)}</span></p>
+                  </div>
+                );
+              })()}
+              {vehicle.tradeInVehicleId && (() => {
+                const received = vehicles.find((v) => v.id === vehicle.tradeInVehicleId);
+                return received ? (
+                  <p className="text-sm text-slate-600">
+                    En esta venta recibiste{' '}
+                    <button onClick={() => navigate(`/vehiculos/${received.id}`)} className="text-brand-600 hover:underline font-medium">
+                      {received.brand} {received.model} {received.year}
+                    </button>{' '}en parte de pago.
+                  </p>
+                ) : null;
+              })()}
+            </Card>
+          )}
+
           {/* Info */}
           <Card>
             <p className="text-base font-semibold text-slate-900 mb-3">Información</p>
@@ -737,6 +794,7 @@ export function VehicleDetail() {
               Ganancia: {formatCurrency(sellForm.soldPrice - totalInvested)}
             </div>
           )}
+          <TradeInSection value={sellTradeIn} onChange={setSellTradeIn} vehicles={vehicles} />
         </div>
       </Modal>
 

@@ -29,6 +29,9 @@ const map = (r) => ({
   senaType: r.sena_type ?? undefined,
   senaClientId: r.sena_client_id ?? undefined,
   senaMethod: r.sena_method ?? undefined,
+  acquiredAs: r.acquired_as ?? undefined,
+  tradeInFromClientId: r.trade_in_from_client_id ?? undefined,
+  tradeInSourceVehicleId: r.trade_in_source_vehicle_id ?? undefined,
   checklist: JSON.parse(r.checklist),
   documents: JSON.parse(r.documents),
   images: JSON.parse(r.images),
@@ -51,8 +54,9 @@ router.post('/', (req, res) => {
     INSERT INTO vehicles (id,brand,model,year,km,color,patent,status,purchase_price,publish_price,
       sold_price,usd_price,purchase_date,sold_date,sold_to_client_id,sale_id,trade_in_vehicle_id,
       sena_amount,sena_date,sena_type,sena_client_id,sena_method,
+      acquired_as,trade_in_from_client_id,trade_in_source_vehicle_id,
       checklist,documents,images,publish_links,price_history,notes,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     id, v.brand, v.model, v.year, v.km, v.color, v.patent, v.status,
     v.purchasePrice, v.publishPrice,
@@ -60,6 +64,7 @@ router.post('/', (req, res) => {
     v.purchaseDate, v.soldDate ?? null, v.soldToClientId ?? null, v.saleId ?? null,
     v.tradeInVehicleId ?? null,
     v.senaAmount ?? null, v.senaDate ?? null, v.senaType ?? null, v.senaClientId ?? null, v.senaMethod ?? null,
+    v.acquiredAs ?? null, v.tradeInFromClientId ?? null, v.tradeInSourceVehicleId ?? null,
     JSON.stringify(v.checklist ?? { lavado: false, pulido: false, mecanica: false, papeles: false }),
     JSON.stringify(v.documents ?? { titulo: false, cedulaVerde: false, cedulaAzul: false, vtv: false, libreDeuda: false, verificacionPolicial: false, seguro: false }),
     JSON.stringify(v.images ?? []),
@@ -80,6 +85,7 @@ router.put('/:id', (req, res) => {
       purchase_price=?,publish_price=?,sold_price=?,usd_price=?,purchase_date=?,
       sold_date=?,sold_to_client_id=?,sale_id=?,trade_in_vehicle_id=?,
       sena_amount=?,sena_date=?,sena_type=?,sena_client_id=?,sena_method=?,
+      acquired_as=?,trade_in_from_client_id=?,trade_in_source_vehicle_id=?,
       checklist=?,documents=?,images=?,publish_links=?,price_history=?,notes=?
     WHERE id=?
   `).run(
@@ -99,6 +105,9 @@ router.put('/:id', (req, res) => {
     v.senaType !== undefined ? v.senaType : existing.sena_type,
     v.senaClientId !== undefined ? v.senaClientId : existing.sena_client_id,
     v.senaMethod !== undefined ? v.senaMethod : existing.sena_method,
+    v.acquiredAs !== undefined ? v.acquiredAs : existing.acquired_as,
+    v.tradeInFromClientId !== undefined ? v.tradeInFromClientId : existing.trade_in_from_client_id,
+    v.tradeInSourceVehicleId !== undefined ? v.tradeInSourceVehicleId : existing.trade_in_source_vehicle_id,
     v.checklist ? JSON.stringify(v.checklist) : existing.checklist,
     v.documents ? JSON.stringify(v.documents) : existing.documents,
     v.images ? JSON.stringify(v.images) : existing.images,
@@ -108,6 +117,71 @@ router.put('/:id', (req, res) => {
     id
   );
   res.json({ vehicle: map(db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id)) });
+});
+
+// Crea un vehículo recibido en parte de pago. Devuelve su id.
+export function createTradeInVehicle(tradeIn, { clientId, sourceVehicleId, date }) {
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO vehicles
+    (id,brand,model,year,km,color,patent,status,purchase_price,publish_price,purchase_date,
+     acquired_as,trade_in_from_client_id,trade_in_source_vehicle_id,
+     checklist,documents,images,publish_links,price_history,notes,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    id, tradeIn.brand ?? '', tradeIn.model ?? '', tradeIn.year ?? 0, tradeIn.km ?? 0,
+    tradeIn.color ?? '', tradeIn.patent ?? '', 'comprado',
+    tradeIn.value ?? 0, tradeIn.publishPrice ?? tradeIn.value ?? 0,
+    date ?? now.split('T')[0], 'parte_pago', clientId ?? null, sourceVehicleId ?? null,
+    JSON.stringify({ lavado: false, pulido: false, mecanica: false, papeles: false }),
+    JSON.stringify({ titulo: false, cedulaVerde: false, cedulaAzul: false, vtv: false, libreDeuda: false, verificacionPolicial: false, seguro: false }),
+    '[]', '[]', '[]', tradeIn.notes ?? '', now,
+  );
+  return id;
+}
+
+// Marca el vehículo como vendido. Soporta auto en parte de pago (nuevo o existente).
+router.put('/:id/sell', (req, res) => {
+  const { id } = req.params;
+  const existing = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'Vehículo no encontrado' });
+  const { soldPrice, soldDate, clientId, tradeIn } = req.body;
+
+  let tradeInVehicleId = null;
+  let tradeInVehicleRow = null;
+  const run = db.transaction(() => {
+    if (tradeIn && tradeIn.type === 'new') {
+      tradeInVehicleId = createTradeInVehicle(tradeIn, { clientId, sourceVehicleId: id, date: soldDate });
+    } else if (tradeIn && tradeIn.type === 'existing' && tradeIn.vehicleId) {
+      tradeInVehicleId = tradeIn.vehicleId;
+      db.prepare(`UPDATE vehicles SET acquired_as='parte_pago', trade_in_from_client_id=?, trade_in_source_vehicle_id=? WHERE id=?`)
+        .run(clientId ?? null, id, tradeIn.vehicleId);
+    }
+    db.prepare(`UPDATE vehicles SET status='vendido', sold_price=?, sold_date=?, sold_to_client_id=?, trade_in_vehicle_id=? WHERE id=?`)
+      .run(soldPrice ?? 0, soldDate ?? null, clientId ?? null, tradeInVehicleId, id);
+    if (tradeInVehicleId) tradeInVehicleRow = map(db.prepare('SELECT * FROM vehicles WHERE id = ?').get(tradeInVehicleId));
+  });
+  run();
+  res.json({ vehicle: map(db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id)), tradeInVehicle: tradeInVehicleRow });
+});
+
+// Revierte una venta: el vehículo vuelve a "publicado" y se borra la venta asociada
+// (cuotas y cheques de esa venta). El auto recibido en parte de pago queda en stock.
+router.put('/:id/revert-sale', (req, res) => {
+  const { id } = req.params;
+  const existing = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'Vehículo no encontrado' });
+  const saleId = existing.sale_id;
+  const run = db.transaction(() => {
+    if (saleId) {
+      db.prepare('DELETE FROM installment_payments WHERE sale_id = ?').run(saleId);
+      db.prepare('DELETE FROM cheques WHERE sale_id = ?').run(saleId);
+      db.prepare('DELETE FROM sales WHERE id = ?').run(saleId);
+    }
+    db.prepare(`UPDATE vehicles SET status='publicado', sold_price=NULL, sold_date=NULL,
+      sold_to_client_id=NULL, sale_id=NULL, trade_in_vehicle_id=NULL WHERE id=?`).run(id);
+  });
+  run();
+  res.json({ vehicle: map(db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id)), deletedSaleId: saleId ?? null });
 });
 
 router.delete('/:id', (req, res) => {

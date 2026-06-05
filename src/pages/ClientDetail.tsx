@@ -11,6 +11,7 @@ import { Select } from '../components/ui/Select';
 import { Badge } from '../components/ui/Badge';
 import { Textarea } from '../components/ui/Input';
 import { formatCurrency, formatDate, vehicleLabel } from '../utils/formatters';
+import { TradeInSection, EMPTY_TRADEIN, toTradeInInput, type TradeInState } from '../components/TradeInSection';
 
 /** Borrador de cheque cargado dentro de una venta (se registra luego en el módulo Cheques). */
 type ChequeDraft = {
@@ -49,11 +50,15 @@ export function ClientDetail() {
     payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '',
     senaAplicada: 0, cheques: [] as ChequeDraft[],
   });
-  const resetSaleForm = () => setSaleForm({
-    vehicleId: '', saleDate: new Date().toISOString().split('T')[0], salePrice: 0, paymentType: 'contado',
-    downPayment: 0, installments: 12, notes: '', invoiceNumber: '', tradeInVehicleId: '', tradeInValue: 0,
-    payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '', senaAplicada: 0, cheques: [],
-  });
+  const [tradeIn, setTradeIn] = useState<TradeInState>(EMPTY_TRADEIN);
+  const resetSaleForm = () => {
+    setSaleForm({
+      vehicleId: '', saleDate: new Date().toISOString().split('T')[0], salePrice: 0, paymentType: 'contado',
+      downPayment: 0, installments: 12, notes: '', invoiceNumber: '', tradeInVehicleId: '', tradeInValue: 0,
+      payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '', senaAplicada: 0, cheques: [],
+    });
+    setTradeIn(EMPTY_TRADEIN);
+  };
   const [editForm, setEditForm] = useState({
     firstName: '', lastName: '', dni: '', cuit: '', phone: '', phone2: '',
     email: '', address: '', city: '', province: '', notes: '', birthDate: '',
@@ -149,7 +154,7 @@ export function ClientDetail() {
     if (saleForm.payTransferencia > 0) paymentMethods.push({ method: 'transferencia', amount: saleForm.payTransferencia });
     if (saleForm.payPrendario > 0) paymentMethods.push({ method: 'credito_prendario', amount: saleForm.payPrendario, reference: saleForm.prendarioRef || undefined });
     if (chequesTotal > 0) paymentMethods.push({ method: 'cheque', amount: chequesTotal });
-    if (saleForm.tradeInValue > 0) paymentMethods.push({ method: 'parte_pago', amount: saleForm.tradeInValue });
+    if (tradeIn.value > 0) paymentMethods.push({ method: 'parte_pago', amount: tradeIn.value });
     if (saleForm.senaAplicada > 0) paymentMethods.push({ method: 'sena', amount: saleForm.senaAplicada });
 
     // Cheques recibidos → se crearán en el módulo Cheques (recibidoDe lo completa el server con el cliente)
@@ -170,12 +175,12 @@ export function ClientDetail() {
         downPayment: saleForm.downPayment, installments: saleForm.installments,
         installmentAmount, notes: saleForm.notes,
         invoiceNumber: saleForm.invoiceNumber || undefined,
-        tradeInVehicleId: saleForm.tradeInVehicleId || undefined,
-        tradeInValue: saleForm.tradeInValue || undefined,
+        tradeInValue: tradeIn.value || undefined,
         paymentMethods: paymentMethods.length ? paymentMethods : undefined,
       },
       payments,
       chequeDrafts,
+      toTradeInInput(tradeIn),
     );
 
     setShowSaleModal(false);
@@ -199,7 +204,7 @@ export function ClientDetail() {
   const chequesDraftTotal = saleForm.cheques.reduce((a, c) => a + (c.monto || 0), 0);
   const assignedTotal =
     saleForm.payEfectivo + saleForm.payTransferencia + saleForm.payPrendario +
-    chequesDraftTotal + saleForm.tradeInValue + saleForm.senaAplicada;
+    chequesDraftTotal + tradeIn.value + saleForm.senaAplicada;
   const assignedRemainder = saleForm.salePrice - assignedTotal;
 
   const groupedByMonth = clientPayments.reduce((acc, p) => {
@@ -480,30 +485,7 @@ export function ClientDetail() {
             </div>
           )}
           {/* Parte de pago */}
-          <div className="border border-slate-200 rounded-xl p-4 space-y-3">
-            <p className="text-sm font-semibold text-slate-700">Parte de pago (opcional)</p>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Auto entregado como parte de pago</label>
-              <select
-                value={saleForm.tradeInVehicleId}
-                onChange={(e) => setSaleForm((f) => ({ ...f, tradeInVehicleId: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-brand-600"
-              >
-                <option value="">— Sin parte de pago —</option>
-                {vehicles.filter((v) => v.status !== 'vendido').map((v) => (
-                  <option key={v.id} value={v.id}>{vehicleLabel(v.brand, v.model, v.year)} — {v.patent}</option>
-                ))}
-              </select>
-            </div>
-            {saleForm.tradeInVehicleId && (
-              <Input
-                label="Valor asignado al auto entregado ($)"
-                type="number"
-                value={saleForm.tradeInValue}
-                onChange={(e) => setSaleForm((f) => ({ ...f, tradeInValue: +e.target.value }))}
-              />
-            )}
-          </div>
+          <TradeInSection value={tradeIn} onChange={setTradeIn} vehicles={vehicles} />
 
           {/* Medios de pago */}
           <div className="border border-brand-200 bg-brand-50/40 rounded-xl p-4 space-y-3">

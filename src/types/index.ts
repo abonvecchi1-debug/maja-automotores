@@ -21,6 +21,19 @@ export interface SalePayment {
   reference?: string;  // entidad del prendario, banco, nota libre, etc.
 }
 
+// Auto entregado en parte de pago al registrar una venta.
+export interface TradeInInput {
+  type: 'new' | 'existing';
+  value: number;            // valor asignado (será el costo del auto recibido)
+  vehicleId?: string;       // si es 'existing'
+  brand?: string;           // datos si es 'new'
+  model?: string;
+  year?: number;
+  patent?: string;
+  km?: number;
+  color?: string;
+}
+
 // Métodos considerados "líquidos" para el cálculo de disponible (efectivo en mano / banco).
 // El cheque va a "en cheques" y parte de pago es stock, no plata.
 export const LIQUID_METHODS: PaymentMethod[] = ['efectivo', 'transferencia', 'credito_prendario', 'sena'];
@@ -62,7 +75,11 @@ export interface Vehicle {
   usdPrice?: number;           // precio referencia en USD
   publishLinks?: string[];     // links a MercadoLibre, Facebook, etc.
   priceHistory?: { date: string; price: number }[];
-  tradeInVehicleId?: string;   // si fue recibido como parte de pago
+  tradeInVehicleId?: string;   // auto que recibimos como parte de pago al vender ESTE
+  // Origen: cómo entró este vehículo al stock
+  acquiredAs?: 'compra' | 'parte_pago';
+  tradeInFromClientId?: string;     // cliente que lo entregó en parte de pago
+  tradeInSourceVehicleId?: string;  // auto que le vendimos cuando nos entregó éste
   // Document checklist
   documents: {
     titulo: boolean;

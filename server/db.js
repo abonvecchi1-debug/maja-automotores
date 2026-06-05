@@ -316,6 +316,10 @@ try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_date TEXT`); } catch {}
 try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_type TEXT`); } catch {}
 try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_client_id TEXT`); } catch {}
 try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_method TEXT`); } catch {}
+// Origen del vehículo (compra normal o recibido en parte de pago) + trazabilidad de la cadena
+try { db.exec(`ALTER TABLE vehicles ADD COLUMN acquired_as TEXT`); } catch {}
+try { db.exec(`ALTER TABLE vehicles ADD COLUMN trade_in_from_client_id TEXT`); } catch {}
+try { db.exec(`ALTER TABLE vehicles ADD COLUMN trade_in_source_vehicle_id TEXT`); } catch {}
 
 // Sync infrastructure
 db.exec(`

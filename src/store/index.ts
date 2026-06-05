@@ -5,7 +5,7 @@ import type {
   Supplier, FixedExpenseType, FixedExpenseRecord,
   Task, Transaction, AppSettings,
   Transfer08, Lead, DailyCash, CashMovement, TaxPayment,
-  Cheque, Sena,
+  Cheque, Sena, TradeInInput,
 } from '../types';
 
 // ─── Store Interface ───────────────────────────────────────────────────────
@@ -48,7 +48,9 @@ interface AppStore {
   updateClient: (id: string, data: Partial<Client>) => void;
   deleteClient: (id: string) => void;
 
-  addSale: (s: Omit<Sale, 'id' | 'createdAt'>, payments: Omit<InstallmentPayment, 'id'>[], cheques?: Omit<Cheque, 'id' | 'createdAt'>[]) => void;
+  addSale: (s: Omit<Sale, 'id' | 'createdAt'>, payments: Omit<InstallmentPayment, 'id'>[], cheques?: Omit<Cheque, 'id' | 'createdAt'>[], tradeIn?: TradeInInput) => void;
+  sellVehicle: (id: string, data: { soldPrice: number; soldDate: string; clientId?: string; tradeIn?: TradeInInput }) => void;
+  revertSale: (id: string) => void;
   markInstallmentPaid: (id: string) => void;
 
   addSupplier: (s: Omit<Supplier, 'id' | 'createdAt'>) => void;
@@ -247,7 +249,7 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   // ── Sales ──────────────────────────────────────────────────────────────
-  addSale: (s, payments, cheques = []) => {
+  addSale: (s, payments, cheques = [], tradeIn) => {
     const saleId = uid();
     const newSale: Sale = { ...s, id: saleId, createdAt: now() };
     const newPayments: InstallmentPayment[] = payments.map((p) => ({ ...p, id: uid(), saleId }));
@@ -261,16 +263,46 @@ export const useStore = create<AppStore>((set, get) => ({
       ),
     }));
     sync(
-      () => authFetch('/api/sales', { method: 'POST', body: JSON.stringify({ sale: s, payments, cheques }) })
+      () => authFetch('/api/sales', { method: 'POST', body: JSON.stringify({ sale: s, payments, cheques, tradeIn }) })
         .then((r) => r.json())
-        .then(({ sale, payments: pms, cheques: chs }) => {
+        .then(({ sale, payments: pms, cheques: chs, tradeInVehicleId }) => {
           set((st) => ({
             sales: st.sales.map((x) => x.id === saleId ? sale : x),
             installmentPayments: [...st.installmentPayments.filter((x) => !newPayments.find((p) => p.id === x.id)), ...pms],
             cheques: [...st.cheques.filter((x) => !newCheques.find((c) => c.id === x.id)), ...(chs ?? [])],
           }));
+          // Si se creó un auto en parte de pago, refrescar para traerlo al stock
+          if (tradeInVehicleId) get().loadAll(true);
         })
     );
+  },
+  sellVehicle: (id, data) => {
+    set((s) => ({
+      vehicles: s.vehicles.map((v) => v.id === id
+        ? { ...v, status: 'vendido' as const, soldPrice: data.soldPrice, soldDate: data.soldDate, soldToClientId: data.clientId }
+        : v),
+    }));
+    sync(() => authFetch(`/api/vehicles/${id}/sell`, { method: 'PUT', body: JSON.stringify(data) })
+      .then((r) => r.json())
+      .then(({ vehicle, tradeInVehicle }) => set((s) => ({
+        vehicles: [
+          ...s.vehicles.map((v) => v.id === id ? vehicle : v),
+          ...(tradeInVehicle && !s.vehicles.some((v) => v.id === tradeInVehicle.id) ? [tradeInVehicle] : []),
+        ],
+      }))));
+  },
+  revertSale: (id) => {
+    const v = get().vehicles.find((x) => x.id === id);
+    const saleId = v?.saleId;
+    set((s) => ({
+      vehicles: s.vehicles.map((x) => x.id === id
+        ? { ...x, status: 'publicado' as const, soldPrice: undefined, soldDate: undefined, soldToClientId: undefined, saleId: undefined, tradeInVehicleId: undefined }
+        : x),
+      sales: saleId ? s.sales.filter((x) => x.id !== saleId) : s.sales,
+      installmentPayments: saleId ? s.installmentPayments.filter((p) => p.saleId !== saleId) : s.installmentPayments,
+      cheques: saleId ? s.cheques.filter((c) => c.saleId !== saleId) : s.cheques,
+    }));
+    sync(() => authFetch(`/api/vehicles/${id}/revert-sale`, { method: 'PUT' }).then(() => {}));
   },
   markInstallmentPaid: (id) => {
     set((s) => ({ installmentPayments: s.installmentPayments.map((p) => p.id === id ? { ...p, paid: true, paidDate: today() } : p) }));
