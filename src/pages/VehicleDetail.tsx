@@ -74,6 +74,8 @@ export function VehicleDetail() {
     brand: '', model: '', year: 0, km: 0,
     color: '', patent: '', purchasePrice: 0, publishPrice: 0,
     purchaseDate: '', notes: '', status: 'comprado' as VehicleStatus,
+    acquiredAs: 'compra' as 'compra' | 'parte_pago',
+    tradeInFromClientId: '', tradeInSourceVehicleId: '',
   });
   const [uploadingImage, setUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -211,6 +213,9 @@ export function VehicleDetail() {
       purchaseDate: vehicle.purchaseDate,
       notes: vehicle.notes,
       status: vehicle.status === 'vendido' ? 'publicado' : vehicle.status,
+      acquiredAs: vehicle.acquiredAs ?? 'compra',
+      tradeInFromClientId: vehicle.tradeInFromClientId ?? '',
+      tradeInSourceVehicleId: vehicle.tradeInSourceVehicleId ?? '',
     });
     setShowEditModal(true);
   };
@@ -984,6 +989,36 @@ export function VehicleDetail() {
               options={STATUS_OPTIONS}
             />
           )}
+
+          {/* Origen del vehículo — permite marcar un auto ya cargado como recibido en parte de pago */}
+          <div className="col-span-1 sm:col-span-2 border-t border-slate-100 pt-4">
+            <p className="text-sm font-semibold text-slate-700 mb-2">Origen del vehículo</p>
+            <Select
+              label="¿Cómo entró a tu stock?"
+              value={editForm.acquiredAs}
+              onChange={(e) => setEditForm((f) => ({ ...f, acquiredAs: e.target.value as 'compra' | 'parte_pago' }))}
+              options={[{ value: 'compra', label: 'Compra normal' }, { value: 'parte_pago', label: 'Recibido en parte de pago' }]}
+            />
+            {editForm.acquiredAs === 'parte_pago' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+                <Select
+                  label="Cliente que lo entregó"
+                  value={editForm.tradeInFromClientId}
+                  onChange={(e) => setEditForm((f) => ({ ...f, tradeInFromClientId: e.target.value }))}
+                  options={clients.map((c) => ({ value: c.id, label: `${c.firstName} ${c.lastName} — DNI ${c.dni}` }))}
+                  placeholder="Seleccionar cliente"
+                />
+                <Select
+                  label="Auto que le vendiste (opcional)"
+                  value={editForm.tradeInSourceVehicleId}
+                  onChange={(e) => setEditForm((f) => ({ ...f, tradeInSourceVehicleId: e.target.value }))}
+                  options={vehicles.filter((v) => v.id !== id && v.status === 'vendido').map((v) => ({ value: v.id, label: `${v.brand} ${v.model} ${v.year} — ${v.patent}` }))}
+                  placeholder="Sin especificar"
+                />
+              </div>
+            )}
+          </div>
+
           <div className="col-span-1 sm:col-span-2">
             <Textarea
               label="Notas" value={editForm.notes}
