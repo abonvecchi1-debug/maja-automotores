@@ -55,6 +55,7 @@ export function VehicleDetail() {
   const vehicle = vehicles.find((v) => v.id === id);
   const vExpenses = expenses.filter((e) => e.vehicleId === id);
   const buyer = vehicle?.soldToClientId ? clients.find((c) => c.id === vehicle.soldToClientId) : null;
+  const purchaseSupplier = vehicle?.purchaseSupplierId ? suppliers.find((s) => s.id === vehicle.purchaseSupplierId) : null;
 
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showSellModal, setShowSellModal] = useState(false);
@@ -75,7 +76,7 @@ export function VehicleDetail() {
     color: '', patent: '', purchasePrice: 0, publishPrice: 0,
     purchaseDate: '', notes: '', status: 'comprado' as VehicleStatus,
     acquiredAs: 'compra' as 'compra' | 'parte_pago',
-    tradeInFromClientId: '', tradeInSourceVehicleId: '',
+    tradeInFromClientId: '', tradeInSourceVehicleId: '', purchaseSupplierId: '',
   });
   const [uploadingImage, setUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -216,6 +217,7 @@ export function VehicleDetail() {
       acquiredAs: vehicle.acquiredAs ?? 'compra',
       tradeInFromClientId: vehicle.tradeInFromClientId ?? '',
       tradeInSourceVehicleId: vehicle.tradeInSourceVehicleId ?? '',
+      purchaseSupplierId: vehicle.purchaseSupplierId ?? '',
     });
     setShowEditModal(true);
   };
@@ -625,6 +627,7 @@ export function VehicleDetail() {
                 ['Kilometraje', formatKm(vehicle.km)],
                 ['Color', vehicle.color],
                 ['Patente', vehicle.patent],
+                ...(purchaseSupplier ? [['Comprado a', purchaseSupplier.name] as [string, string]] : []),
               ].map(([k, v]) => (
                 <div key={String(k)} className="flex justify-between">
                   <dt className="text-slate-500">{k}</dt>
@@ -999,6 +1002,17 @@ export function VehicleDetail() {
               onChange={(e) => setEditForm((f) => ({ ...f, acquiredAs: e.target.value as 'compra' | 'parte_pago' }))}
               options={[{ value: 'compra', label: 'Compra normal' }, { value: 'parte_pago', label: 'Recibido en parte de pago' }]}
             />
+            {editForm.acquiredAs === 'compra' && (
+              <div className="mt-3">
+                <Select
+                  label="Comprado a (agencia / proveedor) — opcional"
+                  value={editForm.purchaseSupplierId}
+                  onChange={(e) => setEditForm((f) => ({ ...f, purchaseSupplierId: e.target.value }))}
+                  options={suppliers.map((s) => ({ value: s.id, label: `${s.name} (${supplierTypeLabel[s.type]})` }))}
+                  placeholder="Sin especificar"
+                />
+              </div>
+            )}
             {editForm.acquiredAs === 'parte_pago' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                 <Select

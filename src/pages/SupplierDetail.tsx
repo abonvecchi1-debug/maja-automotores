@@ -8,7 +8,7 @@ import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { Input, Textarea } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
-import { formatCurrency, formatDate, supplierTypeLabel, supplierTypeColor, vehicleLabel } from '../utils/formatters';
+import { formatCurrency, formatDate, supplierTypeLabel, supplierTypeColor, vehicleLabel, statusLabel, statusColor } from '../utils/formatters';
 
 const PURCHASE_CATEGORIES = [
   { value: 'repuestos', label: 'Repuestos' },
@@ -26,6 +26,7 @@ export function SupplierDetail() {
 
   const supplier = suppliers.find((s) => s.id === id);
   const works = expenses.filter((e) => e.supplierId === id).sort((a, b) => b.date.localeCompare(a.date));
+  const purchasedVehicles = vehicles.filter((v) => v.purchaseSupplierId === id);
 
   const [showModal, setShowModal] = useState(false);
   const emptyForm = {
@@ -208,6 +209,31 @@ export function SupplierDetail() {
               </div>
             )}
           </Card>
+
+          {/* Autos comprados a este proveedor / agencia */}
+          {purchasedVehicles.length > 0 && (
+            <Card className="mt-4" padding={false}>
+              <div className="px-5 py-3 border-b border-slate-100">
+                <p className="text-sm font-semibold text-slate-900">Autos comprados acá ({purchasedVehicles.length})</p>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {purchasedVehicles.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => navigate(`/vehiculos/${v.id}`)}
+                    className="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 text-left transition-colors"
+                  >
+                    <Car size={15} className="text-slate-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-900 truncate">{vehicleLabel(v.brand, v.model, v.year)}</p>
+                      <p className="text-xs text-slate-500">{v.patent} · {formatCurrency(v.purchasePrice)}</p>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor[v.status]}`}>{statusLabel[v.status]}</span>
+                  </button>
+                ))}
+              </div>
+            </Card>
+          )}
 
           {/* Unpaid works summary */}
           {works.filter((w) => !w.paid).length > 0 && (

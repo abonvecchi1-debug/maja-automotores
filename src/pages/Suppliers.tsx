@@ -16,6 +16,7 @@ const TYPE_OPTIONS: { value: SupplierType; label: string }[] = [
   { value: 'repuestero',  label: 'Repuestero' },
   { value: 'lavadero',    label: 'Lavadero' },
   { value: 'gestor',      label: 'Gestor' },
+  { value: 'agencia',     label: 'Agencia' },
   { value: 'otro',        label: 'Otro' },
 ];
 

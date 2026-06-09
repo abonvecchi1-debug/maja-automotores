@@ -320,6 +320,8 @@ try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_method TEXT`); } catch {}
 try { db.exec(`ALTER TABLE vehicles ADD COLUMN acquired_as TEXT`); } catch {}
 try { db.exec(`ALTER TABLE vehicles ADD COLUMN trade_in_from_client_id TEXT`); } catch {}
 try { db.exec(`ALTER TABLE vehicles ADD COLUMN trade_in_source_vehicle_id TEXT`); } catch {}
+// Proveedor/agencia al que le compramos el vehículo (ej: 0km comprado a una agencia)
+try { db.exec(`ALTER TABLE vehicles ADD COLUMN purchase_supplier_id TEXT`); } catch {}
 
 // Sync infrastructure
 db.exec(`

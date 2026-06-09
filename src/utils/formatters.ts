@@ -100,6 +100,7 @@ export const supplierTypeLabel: Record<string, string> = {
   repuestero: 'Repuestero',
   lavadero: 'Lavadero',
   gestor: 'Gestor',
+  agencia: 'Agencia',
   otro: 'Otro',
 };
 
@@ -108,6 +109,7 @@ export const supplierTypeColor: Record<string, string> = {
   repuestero: 'bg-purple-100 text-purple-800',
   lavadero: 'bg-cyan-100 text-cyan-800',
   gestor: 'bg-orange-100 text-orange-800',
+  agencia: 'bg-emerald-100 text-emerald-800',
   otro: 'bg-slate-100 text-slate-700',
 };
 

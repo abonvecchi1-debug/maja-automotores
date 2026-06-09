@@ -1,7 +1,7 @@
 // ─── Enums / Union types ───────────────────────────────────────────────────
 
 export type VehicleStatus = 'comprado' | 'preparacion' | 'publicado' | 'señado' | 'vendido';
-export type SupplierType = 'mecanico' | 'repuestero' | 'lavadero' | 'gestor' | 'otro';
+export type SupplierType = 'mecanico' | 'repuestero' | 'lavadero' | 'gestor' | 'agencia' | 'otro';
 export type TaskStatus = 'pendiente' | 'en_proceso' | 'terminado';
 export type TaskPriority = 'baja' | 'media' | 'alta';
 export type PaymentType = 'contado' | 'financiado';
@@ -80,6 +80,7 @@ export interface Vehicle {
   acquiredAs?: 'compra' | 'parte_pago';
   tradeInFromClientId?: string;     // cliente que lo entregó en parte de pago
   tradeInSourceVehicleId?: string;  // auto que le vendimos cuando nos entregó éste
+  purchaseSupplierId?: string;      // proveedor/agencia al que le compramos el auto (ej: 0km)
   // Document checklist
   documents: {
     titulo: boolean;

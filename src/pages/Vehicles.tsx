@@ -10,7 +10,7 @@ import { Card } from '../components/ui/Card';
 import { Textarea } from '../components/ui/Input';
 import {
   formatCurrency, formatKm, formatDate,
-  statusLabel, statusColor, vehicleLabel,
+  statusLabel, statusColor, vehicleLabel, supplierTypeLabel,
 } from '../utils/formatters';
 import { uploadVehicleImage } from '../utils/upload';
 import type { VehicleStatus } from '../types';
@@ -32,13 +32,13 @@ const INITIAL_FORM = {
   brand: '', model: '', year: new Date().getFullYear(), km: 0,
   color: '', patent: '', status: 'comprado' as VehicleStatus,
   purchasePrice: 0, publishPrice: 0, purchaseDate: new Date().toISOString().split('T')[0],
-  notes: '',
+  notes: '', purchaseSupplierId: '',
 };
 
 export function Vehicles() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { vehicles, expenses, addVehicle } = useStore();
+  const { vehicles, expenses, addVehicle, suppliers } = useStore();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') ?? '');
   const [brandFilter, setBrandFilter] = useState('');
@@ -338,6 +338,15 @@ export function Vehicles() {
             onChange={(e) => field('status', e.target.value as VehicleStatus)}
             options={STATUS_OPTIONS.filter((o) => o.value !== '')}
           />
+          <div className="col-span-1 sm:col-span-2">
+            <Select
+              label="Comprado a (agencia / proveedor) — opcional"
+              value={form.purchaseSupplierId}
+              onChange={(e) => field('purchaseSupplierId', e.target.value)}
+              options={suppliers.map((s) => ({ value: s.id, label: `${s.name} (${supplierTypeLabel[s.type]})` }))}
+              placeholder="Sin especificar"
+            />
+          </div>
           <div className="col-span-1 sm:col-span-2">
             <Textarea label="Notas" value={form.notes} onChange={(e) => field('notes', e.target.value)} placeholder="Observaciones del vehículo..." />
           </div>
