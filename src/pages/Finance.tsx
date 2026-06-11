@@ -181,13 +181,19 @@ export function Finance() {
   }
   const collectedInstallments = installmentPayments.filter((p) => p.paid).reduce((a, p) => a + p.amount, 0);
   const manualIncome = transactions.filter((t) => t.type === 'ingreso').reduce((a, t) => a + t.amount, 0);
-  // Señas ahora viven en el vehículo: venta activa (señado) suma; compra resta.
+  // Señas ahora viven en el vehículo: venta activa (señado) suma; compra (mientras está señado) resta.
   const senaVentaActiva = vehicles
     .filter((v) => v.status === 'señado' && v.senaType === 'venta' && (v.senaAmount ?? 0) > 0 && isLiquid(v.senaMethod))
     .reduce((a, v) => a + (v.senaAmount ?? 0), 0);
+  // Mientras la compra está señada solo salió la seña (el precio total se descuenta recién al completar la compra).
   const senaCompra = vehicles
-    .filter((v) => v.senaType === 'compra' && (v.senaAmount ?? 0) > 0 && isLiquid(v.senaMethod))
+    .filter((v) => v.status === 'señado' && v.senaType === 'compra' && (v.senaAmount ?? 0) > 0 && isLiquid(v.senaMethod))
     .reduce((a, v) => a + (v.senaAmount ?? 0), 0);
+  // Compra de vehículos pagada en plata: descuenta el precio de compra. Excluye los recibidos
+  // en parte de pago (no salió plata) y los que están señados como compra (solo salió la seña).
+  const comprasVehiculos = vehicles
+    .filter((v) => v.acquiredAs !== 'parte_pago' && !(v.status === 'señado' && v.senaType === 'compra'))
+    .reduce((a, v) => a + (v.purchasePrice ?? 0), 0);
   const chequesCobrados = cheques.filter((c) => c.moneda === 'ARS' && c.estado === 'cobrado').reduce((a, c) => a + c.monto, 0);
   const manualPaidExpense = transactions.filter((t) => t.type === 'egreso' && t.paid !== false).reduce((a, t) => a + t.amount, 0);
   const gastosVarPaid = expenses.filter((e) => e.paid).reduce((a, e) => a + e.amount, 0);
@@ -195,7 +201,7 @@ export function Finance() {
   const impuestosPaid = taxPayments.filter((t) => t.paid).reduce((a, t) => a + t.amount, 0);
 
   const disponible = saleLiquid + collectedInstallments + manualIncome + senaVentaActiva + chequesCobrados
-    - manualPaidExpense - gastosVarPaid - gastosFijosPaid - impuestosPaid - senaCompra;
+    - manualPaidExpense - gastosVarPaid - gastosFijosPaid - impuestosPaid - senaCompra - comprasVehiculos;
 
   const chequesEnCarteraEstados = ['en_cartera', 'depositado'];
   const enChequesARS = cheques.filter((c) => c.moneda === 'ARS' && chequesEnCarteraEstados.includes(c.estado)).reduce((a, c) => a + c.monto, 0);
@@ -243,7 +249,7 @@ export function Finance() {
             <div className="min-w-0">
               <p className="text-xs text-slate-500 font-medium">Disponible (efectivo + banco)</p>
               <p className={`text-2xl font-bold ${disponible >= 0 ? 'text-brand-700' : 'text-red-700'}`}>{formatCurrency(disponible)}</p>
-              <p className="text-[11px] text-slate-400">Estimado de plata líquida. No descuenta compras de vehículos que no estén cargadas en Finanzas.</p>
+              <p className="text-[11px] text-slate-400">Plata líquida: ingresos cobrados menos egresos pagados y compras de vehículos (precio de compra). Los autos recibidos en parte de pago no descuentan.</p>
             </div>
           </div>
         </Card>
