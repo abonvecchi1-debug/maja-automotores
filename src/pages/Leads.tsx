@@ -9,6 +9,7 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
+import { confirmDialog } from '../components/ui/Feedback';
 import { formatDate } from '../utils/formatters';
 import type { LeadStatus, LeadSource } from '../types';
 
@@ -248,7 +249,7 @@ export function Leads() {
                       <ChevronDown size={15} />
                     </button>
                     <button
-                      onClick={() => deleteLead(lead.id)}
+                      onClick={() => confirmDialog({ title: 'Eliminar consulta', message: `¿Eliminar la consulta de "${lead.name}"?`, confirmLabel: 'Eliminar', danger: true }).then((ok) => ok && deleteLead(lead.id))}
                       className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
                       title="Eliminar"
                     >

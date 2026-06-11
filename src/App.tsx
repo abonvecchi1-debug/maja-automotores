@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { useAuthStore } from './store/authStore';
 import { useStore } from './store';
+import { FeedbackHost } from './components/ui/Feedback';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Vehicles } from './pages/Vehicles';
@@ -42,7 +43,9 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isAuthenticated) return;
     const refresh = () => {
-      if (document.visibilityState === 'visible') loadAll(true);
+      // No refrescar si la pestaña no está visible o si hay un modal abierto
+      // (el Modal pone overflow:hidden en el body), para no mover nada mientras cargás algo.
+      if (document.visibilityState === 'visible' && document.body.style.overflow !== 'hidden') loadAll(true);
     };
     const interval = setInterval(refresh, 60_000);
     window.addEventListener('focus', refresh);
@@ -54,7 +57,7 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
     };
   }, [isAuthenticated, loadAll]);
 
-  return <>{children}</>;
+  return <>{children}<FeedbackHost /></>;
 }
 
 export default function App() {

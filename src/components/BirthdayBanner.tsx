@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Cake, X } from 'lucide-react';
 import { useStore } from '../store';
+import { notify } from './ui/Feedback';
 
 export function BirthdayBanner() {
   const { clients } = useStore();
@@ -14,6 +15,17 @@ export function BirthdayBanner() {
   const birthdayClients = clients.filter(
     (c) => c.birthDate && c.birthDate.slice(5) === todayMMDD
   );
+
+  // Notificación pop-up (toast) una sola vez por día, además del banner.
+  useEffect(() => {
+    if (birthdayClients.length === 0) return;
+    const key = `bday-toast-${today.toISOString().slice(0, 10)}`;
+    if (sessionStorage.getItem(key)) return;
+    const names = birthdayClients.map((c) => `${c.firstName} ${c.lastName}`).join(', ');
+    notify(`🎂 Hoy cumple${birthdayClients.length > 1 ? 'n' : ''} años: ${names}. ¡No te olvides de saludar!`, 'info');
+    sessionStorage.setItem(key, '1');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [birthdayClients.length]);
 
   if (dismissed || birthdayClients.length === 0) return null;
 

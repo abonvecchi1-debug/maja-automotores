@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
+import { confirmDialog } from '../components/ui/Feedback';
 import { formatCurrency, formatDate, getCurrentMonth, formatMonthLabel } from '../utils/formatters';
 import type { TaxType } from '../types';
 
@@ -208,7 +209,7 @@ export function Taxes() {
                         <FileText size={14} />
                       </button>
                       <button
-                        onClick={() => deleteTaxPayment(t.id)}
+                        onClick={() => confirmDialog({ title: 'Eliminar impuesto', message: `¿Eliminar "${t.description}"?`, confirmLabel: 'Eliminar', danger: true }).then((ok) => ok && deleteTaxPayment(t.id))}
                         className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         title="Eliminar"
                       >

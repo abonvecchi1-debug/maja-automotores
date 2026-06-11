@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, FileDown, TableIcon, X, ChevronDown, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, Trash2, FileDown, TableIcon, X, ChevronDown, AlertTriangle, CheckCircle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { useStore } from '../store';
+import { notify } from '../components/ui/Feedback';
 import type { Cheque } from '../types';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
@@ -208,7 +209,7 @@ function ChequeModal({
           <button
             onClick={() => {
               if (!form.numero || !form.banco || !form.monto || !form.fechaVencimiento || !form.librador || !form.recibidoDe) {
-                alert('Completá los campos obligatorios (*)');
+                notify('Completá los campos obligatorios (*)', 'error');
                 return;
               }
               onSave(form);
@@ -599,6 +600,13 @@ export function Cheques() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-1">
+                            {(c.estado === 'en_cartera' || c.estado === 'depositado') && (
+                              <button onClick={() => updateCheque(c.id, { estado: 'cobrado' })}
+                                title="Marcar como cobrado"
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors">
+                                <CheckCircle size={14} />
+                              </button>
+                            )}
                             <button onClick={() => setModal({ open: true, editing: c })}
                               className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
                               <Pencil size={14} />

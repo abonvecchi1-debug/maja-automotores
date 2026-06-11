@@ -13,6 +13,7 @@ import {
   statusLabel, statusColor, vehicleLabel, supplierTypeLabel,
 } from '../utils/formatters';
 import { uploadVehicleImage } from '../utils/upload';
+import { notify } from '../components/ui/Feedback';
 import type { VehicleStatus } from '../types';
 
 const STATUS_OPTIONS = [
@@ -125,7 +126,7 @@ export function Vehicles() {
       pendingImages.forEach((img) => URL.revokeObjectURL(img.preview));
       setPendingImages([]);
     } catch {
-      alert('Error al subir las imágenes. Intente de nuevo.');
+      notify('Error al subir las imágenes. Intentá de nuevo.', 'error');
     } finally {
       setUploading(false);
     }

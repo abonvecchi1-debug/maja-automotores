@@ -25,6 +25,7 @@ export function Clients() {
   const navigate = useNavigate();
   const { clients, sales, installmentPayments, vehicles, addClient } = useStore();
   const [search, setSearch] = useState('');
+  const [onlyDebt, setOnlyDebt] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
   const [formError, setFormError] = useState('');
@@ -35,10 +36,15 @@ export function Clients() {
   const isBirthdayToday = (birthDate?: string) =>
     !!birthDate && birthDate.slice(5) === todayMMDD;
 
-  const filtered = clients.filter((c) =>
-    search === '' ||
-    `${c.firstName} ${c.lastName} ${c.dni} ${c.phone}`.toLowerCase().includes(search.toLowerCase())
-  );
+  const hasPendingDebt = (clientId: string) =>
+    sales.some((s) => s.clientId === clientId && s.paymentType === 'financiado'
+      && installmentPayments.some((p) => p.saleId === s.id && !p.paid));
+
+  const filtered = clients.filter((c) => {
+    const matchSearch = search === '' ||
+      `${c.firstName} ${c.lastName} ${c.dni} ${c.phone}`.toLowerCase().includes(search.toLowerCase());
+    return matchSearch && (!onlyDebt || hasPendingDebt(c.id));
+  });
 
   const clientBalance = (clientId: string) => {
     const clientSales = sales.filter((s) => s.clientId === clientId && s.paymentType === 'financiado');
@@ -85,14 +91,22 @@ export function Clients() {
         </Button>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          value={search} onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por nombre, DNI, teléfono..."
-          className="w-full pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
-        />
+      {/* Search + filtros */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre, DNI, teléfono..."
+            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-brand-600 focus:border-brand-600"
+          />
+        </div>
+        <button
+          onClick={() => setOnlyDebt((v) => !v)}
+          className={`px-3 py-2 text-sm rounded-lg border transition-colors ${onlyDebt ? 'bg-amber-50 border-amber-300 text-amber-700 font-medium' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+        >
+          Con deuda
+        </button>
       </div>
 
       {/* Table */}

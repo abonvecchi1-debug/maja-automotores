@@ -9,7 +9,7 @@ import { formatCurrency, formatCurrencyShort, formatDate, statusLabel, statusCol
 export function Dashboard() {
   const {
     vehicles, clients, sales, installmentPayments,
-    expenses, fixedExpenseRecords, tasks, suppliers, settings, transactions, taxPayments,
+    expenses, fixedExpenseRecords, tasks, suppliers, settings, transactions, taxPayments, cheques,
   } = useStore();
 
   const today = new Date().toISOString().split('T')[0];
@@ -51,6 +51,12 @@ export function Dashboard() {
   const unpaidSupplierDebts = expenses.filter((e) => e.supplierId && !e.paid);
   const pendingFixedExpenses = fixedExpenseRecords.filter((r) => r.month === thisMonth && !r.paid);
   const totalSupplierDebt   = unpaidSupplierDebts.reduce((acc, e) => acc + e.amount, 0);
+
+  // Cheques en cartera próximos a vencer / vencidos (para no perder fechas de cobro)
+  const in7Days = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+  const chequesActivos = cheques.filter((c) => c.estado === 'en_cartera' || c.estado === 'depositado');
+  const chequesVencidos = chequesActivos.filter((c) => c.fechaVencimiento && c.fechaVencimiento < today);
+  const chequesPorVencer = chequesActivos.filter((c) => c.fechaVencimiento && c.fechaVencimiento >= today && c.fechaVencimiento <= in7Days);
 
   // ── Vehicle profitability ──────────────────────────────────────────────
 
@@ -122,16 +128,25 @@ export function Dashboard() {
       </div>
 
       {/* Alerts row */}
-      {(overdueInstallments.length > 0 || pendingFixedExpenses.length > 0) && (
+      {(overdueInstallments.length > 0 || pendingFixedExpenses.length > 0 || chequesVencidos.length > 0 || chequesPorVencer.length > 0) && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
           <AlertTriangle size={20} className="text-red-500 flex-shrink-0" />
-          <div className="flex-1 text-sm text-red-700">
+          <div className="flex-1 text-sm text-red-700 flex flex-wrap items-center gap-x-2 gap-y-1">
             {overdueInstallments.length > 0 && (
               <span className="font-medium">{overdueInstallments.length} cuota{overdueInstallments.length > 1 ? 's' : ''} vencida{overdueInstallments.length > 1 ? 's' : ''}</span>
             )}
-            {overdueInstallments.length > 0 && pendingFixedExpenses.length > 0 && ' · '}
             {pendingFixedExpenses.length > 0 && (
-              <span>{pendingFixedExpenses.length} gasto{pendingFixedExpenses.length > 1 ? 's' : ''} fijo{pendingFixedExpenses.length > 1 ? 's' : ''} pendiente{pendingFixedExpenses.length > 1 ? 's' : ''} este mes</span>
+              <span>· {pendingFixedExpenses.length} gasto{pendingFixedExpenses.length > 1 ? 's' : ''} fijo{pendingFixedExpenses.length > 1 ? 's' : ''} pendiente{pendingFixedExpenses.length > 1 ? 's' : ''} este mes</span>
+            )}
+            {chequesVencidos.length > 0 && (
+              <button onClick={() => navigate('/cheques')} className="font-medium underline hover:text-red-900">
+                · {chequesVencidos.length} cheque{chequesVencidos.length > 1 ? 's' : ''} vencido{chequesVencidos.length > 1 ? 's' : ''} en cartera
+              </button>
+            )}
+            {chequesPorVencer.length > 0 && (
+              <button onClick={() => navigate('/cheques')} className="underline hover:text-red-900">
+                · {chequesPorVencer.length} cheque{chequesPorVencer.length > 1 ? 's' : ''} vence{chequesPorVencer.length > 1 ? 'n' : ''} esta semana
+              </button>
             )}
           </div>
         </div>

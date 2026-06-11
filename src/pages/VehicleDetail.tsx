@@ -15,6 +15,7 @@ import {
 } from '../utils/formatters';
 import { uploadVehicleImage } from '../utils/upload';
 import { TradeInSection, EMPTY_TRADEIN, toTradeInInput, type TradeInState } from '../components/TradeInSection';
+import { confirmDialog, notify } from '../components/ui/Feedback';
 import type { VehicleStatus, PaymentMethod } from '../types';
 
 const SENA_METHODS: { value: PaymentMethod; label: string }[] = [
@@ -134,9 +135,12 @@ export function VehicleDetail() {
   };
 
   const handleRevertSale = () => {
-    if (confirm('¿Volver a poner este vehículo como disponible? Se va a deshacer la venta (y sus cuotas/cheques si tenía). El auto recibido en parte de pago queda en tu stock.')) {
-      revertSale(id!);
-    }
+    confirmDialog({
+      title: 'Revertir venta',
+      message: '¿Volver a poner este vehículo como disponible? Se va a deshacer la venta (y sus cuotas/cheques si tenía). El auto recibido en parte de pago queda en tu stock.',
+      confirmLabel: 'Revertir venta',
+      danger: true,
+    }).then((ok) => { if (ok) revertSale(id!); });
   };
 
   const openSenaModal = () => {
@@ -145,7 +149,7 @@ export function VehicleDetail() {
   };
 
   const handleSenar = () => {
-    if (!senaForm.amount) return;
+    if (!senaForm.amount || senaForm.amount <= 0) { notify('Poné el monto de la seña.', 'error'); return; }
     updateVehicle(id!, {
       status: 'señado',
       senaType: senaForm.type,
@@ -176,8 +180,15 @@ export function VehicleDetail() {
         vehicleId: id!,
       });
     }
-    updateVehicle(id!, { status: 'publicado', senaAmount: 0 });
     setShowCancelSenaModal(false);
+    if (vehicle.senaType === 'compra') {
+      // No llegamos a comprar el auto → se quita del stock (si la perdimos, el egreso ya quedó registrado).
+      deleteVehicle(id!);
+      navigate('/vehiculos');
+    } else {
+      // Seña de venta caída: el auto es nuestro, vuelve a estar disponible.
+      updateVehicle(id!, { status: 'publicado', senaAmount: 0 });
+    }
   };
 
   const handleAssignBuyer = () => {
@@ -188,17 +199,20 @@ export function VehicleDetail() {
   };
 
   const handleAddExpense = () => {
-    if (!expenseForm.description || !expenseForm.amount) return;
+    if (!expenseForm.description.trim()) { notify('Poné una descripción del gasto.', 'error'); return; }
+    if (!expenseForm.amount || expenseForm.amount <= 0) { notify('El monto tiene que ser mayor a 0.', 'error'); return; }
     addExpense({ ...expenseForm, vehicleId: id!, supplierId: expenseForm.supplierId || undefined });
     setExpenseForm(INITIAL_EXPENSE);
     setShowExpenseModal(false);
   };
 
   const handleDelete = () => {
-    if (confirm(`¿Eliminar ${vehicle.brand} ${vehicle.model}? Esta acción no se puede deshacer.`)) {
-      deleteVehicle(id!);
-      navigate('/vehiculos');
-    }
+    confirmDialog({
+      title: 'Eliminar vehículo',
+      message: `¿Eliminar ${vehicle.brand} ${vehicle.model}? Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    }).then((ok) => { if (!ok) return; deleteVehicle(id!); navigate('/vehiculos'); });
   };
 
   const openEditModal = () => {
@@ -239,7 +253,7 @@ export function VehicleDetail() {
       }
       updateVehicle(id!, { images: [...(vehicle.images ?? []), ...urls] });
     } catch {
-      alert('Error al subir la imagen. Intente de nuevo.');
+      notify('Error al subir la imagen. Intentá de nuevo.', 'error');
     } finally {
       setUploadingImage(false);
       if (imageInputRef.current) imageInputRef.current.value = '';
@@ -502,7 +516,7 @@ export function VehicleDetail() {
                           ? <Badge variant="success">Pagado</Badge>
                           : <button onClick={() => markExpensePaid(e.id)} className="text-xs text-brand-600 hover:underline">Marcar pagado</button>
                         }
-                        <button onClick={() => deleteExpense(e.id)} className="text-slate-300 hover:text-red-500 transition-colors">
+                        <button onClick={() => confirmDialog({ title: 'Eliminar gasto', message: `¿Eliminar el gasto "${e.description}"?`, confirmLabel: 'Eliminar', danger: true }).then((ok) => ok && deleteExpense(e.id))} className="text-slate-300 hover:text-red-500 transition-colors">
                           <Trash2 size={14} />
                         </button>
                       </div>

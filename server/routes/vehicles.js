@@ -176,7 +176,10 @@ router.put('/:id/revert-sale', (req, res) => {
   const run = db.transaction(() => {
     if (saleId) {
       db.prepare('DELETE FROM installment_payments WHERE sale_id = ?').run(saleId);
-      db.prepare('DELETE FROM cheques WHERE sale_id = ?').run(saleId);
+      // Solo se borran los cheques que siguen en cartera. Los ya cobrados/entregados/etc.
+      // se conservan (se desvinculan de la venta) para no perder ese registro financiero.
+      db.prepare(`DELETE FROM cheques WHERE sale_id = ? AND estado = 'en_cartera'`).run(saleId);
+      db.prepare('UPDATE cheques SET sale_id = NULL WHERE sale_id = ?').run(saleId);
       db.prepare('DELETE FROM sales WHERE id = ?').run(saleId);
     }
     db.prepare(`UPDATE vehicles SET status='publicado', sold_price=NULL, sold_date=NULL,

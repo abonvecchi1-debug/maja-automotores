@@ -300,7 +300,11 @@ export const useStore = create<AppStore>((set, get) => ({
         : x),
       sales: saleId ? s.sales.filter((x) => x.id !== saleId) : s.sales,
       installmentPayments: saleId ? s.installmentPayments.filter((p) => p.saleId !== saleId) : s.installmentPayments,
-      cheques: saleId ? s.cheques.filter((c) => c.saleId !== saleId) : s.cheques,
+      cheques: saleId
+        ? s.cheques
+            .filter((c) => !(c.saleId === saleId && c.estado === 'en_cartera'))
+            .map((c) => (c.saleId === saleId ? { ...c, saleId: undefined } : c))
+        : s.cheques,
     }));
     sync(() => authFetch(`/api/vehicles/${id}/revert-sale`, { method: 'PUT' }).then(() => {}));
   },

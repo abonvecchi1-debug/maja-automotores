@@ -9,6 +9,7 @@ import { Card } from '../components/ui/Card';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
+import { confirmDialog, notify } from '../components/ui/Feedback';
 import { formatCurrency, formatDate, getCurrentMonth, formatMonthLabel } from '../utils/formatters';
 
 const INCOME_CATEGORIES = [
@@ -172,11 +173,20 @@ export function Finance() {
   for (const v of vehicles.filter((v) => v.status === 'vendido')) {
     const sale = sales.find((s) => s.id === v.saleId) ?? sales.find((s) => s.vehicleId === v.id);
     if (sale?.paymentMethods?.length) {
+      // El desglose ya excluye lo que no es plata (parte de pago, cheque).
       saleLiquid += sale.paymentMethods.filter((p) => isLiquid(p.method)).reduce((a, p) => a + p.amount, 0);
     } else if (sale) {
-      saleLiquid += sale.paymentType === 'financiado' ? (sale.downPayment ?? 0) : (sale.salePrice ?? v.soldPrice ?? 0);
+      // Sin desglose: el precio puede incluir un auto en parte de pago (no es plata) → descontarlo.
+      saleLiquid += sale.paymentType === 'financiado'
+        ? (sale.downPayment ?? 0)
+        : Math.max(0, (sale.salePrice ?? v.soldPrice ?? 0) - (sale.tradeInValue ?? 0));
     } else {
-      saleLiquid += v.soldPrice ?? 0;
+      // Venta desde el vehículo (sin registro de venta): si recibimos un auto en parte de
+      // pago, descontar su valor (es stock, no plata líquida).
+      const tradeInVal = v.tradeInVehicleId
+        ? (vehicles.find((x) => x.id === v.tradeInVehicleId)?.purchasePrice ?? 0)
+        : 0;
+      saleLiquid += Math.max(0, (v.soldPrice ?? 0) - tradeInVal);
     }
   }
   const collectedInstallments = installmentPayments.filter((p) => p.paid).reduce((a, p) => a + p.amount, 0);
@@ -210,7 +220,8 @@ export function Finance() {
   const fmtUSD = (n: number) => 'U$S ' + n.toLocaleString('es-AR', { maximumFractionDigits: 0 });
 
   const handleSave = () => {
-    if (!form.description || !form.amount) return;
+    if (!form.description.trim()) { notify('Poné una descripción del movimiento.', 'error'); return; }
+    if (!form.amount || form.amount <= 0) { notify('El monto tiene que ser mayor a 0.', 'error'); return; }
     addTransaction({
       type: form.type,
       category: form.category,
@@ -417,7 +428,7 @@ export function Finance() {
                   </span>
 
                   {m.source === 'tx' ? (
-                    <button onClick={() => deleteTransaction(m.txId!)} className="text-slate-300 hover:text-red-500 transition-colors flex-shrink-0" title="Eliminar">
+                    <button onClick={() => confirmDialog({ title: 'Eliminar movimiento', message: `¿Eliminar "${m.description}"?`, confirmLabel: 'Eliminar', danger: true }).then((ok) => ok && deleteTransaction(m.txId!))} className="text-slate-300 hover:text-red-500 transition-colors flex-shrink-0" title="Eliminar">
                       <Trash2 size={14} />
                     </button>
                   ) : m.vehicleId ? (

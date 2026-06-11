@@ -8,6 +8,7 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Textarea } from '../components/ui/Input';
+import { confirmDialog } from '../components/ui/Feedback';
 import { formatDate, taskStatusLabel, taskStatusColor, taskPriorityLabel, taskPriorityColor, supplierTypeLabel, vehicleLabel } from '../utils/formatters';
 import type { TaskStatus, TaskPriority } from '../types';
 
@@ -125,7 +126,7 @@ export function Tasks() {
                   <div key={task.id} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow transition-shadow">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-semibold text-slate-900 flex-1">{task.title}</p>
-                      <button onClick={() => deleteTask(task.id)} className="text-slate-200 hover:text-red-500 transition-colors flex-shrink-0">
+                      <button onClick={() => confirmDialog({ title: 'Eliminar tarea', message: `¿Eliminar la tarea "${task.title}"?`, confirmLabel: 'Eliminar', danger: true }).then((ok) => ok && deleteTask(task.id))} className="text-slate-200 hover:text-red-500 transition-colors flex-shrink-0">
                         <Trash2 size={13} />
                       </button>
                     </div>

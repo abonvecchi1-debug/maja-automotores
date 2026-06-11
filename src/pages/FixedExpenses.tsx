@@ -7,6 +7,7 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Badge } from '../components/ui/Badge';
+import { confirmDialog } from '../components/ui/Feedback';
 import { formatCurrency, formatDate, getCurrentMonth, formatMonthLabel } from '../utils/formatters';
 
 const CATEGORIES = [
@@ -268,7 +269,7 @@ export function FixedExpenses() {
                   >
                     {t.active ? 'Activo' : 'Inactivo'}
                   </button>
-                  <button onClick={() => deleteFixedExpenseType(t.id)} className="text-slate-300 hover:text-red-500 transition-colors">
+                  <button onClick={() => confirmDialog({ title: 'Eliminar tipo de gasto', message: `¿Eliminar "${t.name}"?`, confirmLabel: 'Eliminar', danger: true }).then((ok) => ok && deleteFixedExpenseType(t.id))} className="text-slate-300 hover:text-red-500 transition-colors">
                     <Trash2 size={14} />
                   </button>
                 </div>

@@ -9,6 +9,7 @@ import { Modal } from '../components/ui/Modal';
 import { Input, Textarea } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { formatCurrency, formatDate, supplierTypeLabel, supplierTypeColor, vehicleLabel, statusLabel, statusColor } from '../utils/formatters';
+import { confirmDialog, notify } from '../components/ui/Feedback';
 
 const PURCHASE_CATEGORIES = [
   { value: 'repuestos', label: 'Repuestos' },
@@ -36,7 +37,8 @@ export function SupplierDetail() {
   const [form, setForm] = useState(emptyForm);
 
   const handleSavePurchase = () => {
-    if (!form.description || !form.amount) return;
+    if (!form.description.trim()) { notify('Poné qué le compraste o qué trabajo hizo.', 'error'); return; }
+    if (!form.amount || form.amount <= 0) { notify('El monto tiene que ser mayor a 0.', 'error'); return; }
     addExpense({
       description: form.description,
       amount: form.amount,
@@ -68,10 +70,12 @@ export function SupplierDetail() {
   const totalBilled = works.reduce((a, w) => a + w.amount, 0);
 
   const handleDelete = () => {
-    if (confirm(`¿Eliminar proveedor "${supplier.name}"?`)) {
-      deleteSupplier(id!);
-      navigate('/proveedores');
-    }
+    confirmDialog({
+      title: 'Eliminar proveedor',
+      message: `¿Eliminar proveedor "${supplier.name}"? Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    }).then((ok) => { if (!ok) return; deleteSupplier(id!); navigate('/proveedores'); });
   };
 
   return (
@@ -165,7 +169,7 @@ export function SupplierDetail() {
                             </Button>
                           )
                         }
-                        <button onClick={() => deleteExpense(w.id)} className="text-slate-300 hover:text-red-500 transition-colors">
+                        <button onClick={() => confirmDialog({ title: 'Eliminar compra', message: `¿Eliminar "${w.description}"?`, confirmLabel: 'Eliminar', danger: true }).then((ok) => ok && deleteExpense(w.id))} className="text-slate-300 hover:text-red-500 transition-colors">
                           <Trash2 size={14} />
                         </button>
                       </div>

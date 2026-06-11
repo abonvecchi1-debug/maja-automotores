@@ -12,6 +12,7 @@ import { Badge } from '../components/ui/Badge';
 import { Textarea } from '../components/ui/Input';
 import { formatCurrency, formatDate, vehicleLabel } from '../utils/formatters';
 import { TradeInSection, EMPTY_TRADEIN, toTradeInInput, type TradeInState } from '../components/TradeInSection';
+import { notify } from '../components/ui/Feedback';
 
 /** Borrador de cheque cargado dentro de una venta (se registra luego en el módulo Cheques). */
 type ChequeDraft = {
@@ -130,7 +131,8 @@ export function ClientDetail() {
   };
 
   const handleAddSale = () => {
-    if (!saleForm.vehicleId || !saleForm.salePrice) return;
+    if (!saleForm.vehicleId) { notify('Elegí el vehículo que vendés.', 'error'); return; }
+    if (!saleForm.salePrice || saleForm.salePrice <= 0) { notify('Poné el precio de venta.', 'error'); return; }
     const installmentAmount = saleForm.paymentType === 'financiado' && saleForm.installments > 0
       ? (saleForm.salePrice - saleForm.downPayment) / saleForm.installments : 0;
     const payments = saleForm.paymentType === 'financiado'
