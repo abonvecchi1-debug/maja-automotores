@@ -187,6 +187,21 @@ export async function triggerSync() {
   return { ok: true };
 }
 
+// Re-sincronización completa: ignora la marca de tiempo y vuelve a bajar TODO
+// desde Render (resetea last_sync_at). Recupera registros "saltados" por desfasajes
+// de reloj entre dispositivos o pushes tardíos. El upsert es idempotente.
+export async function forceFullSync() {
+  const isOnline = await checkOnline();
+  if (!isOnline) {
+    state.online = false;
+    return { ok: false, reason: 'offline' };
+  }
+  state.online = true;
+  setLastSync('2000-01-01T00:00:00Z');
+  await sync();
+  return { ok: true };
+}
+
 export function start() {
   // Initial check
   checkOnline().then(online => {

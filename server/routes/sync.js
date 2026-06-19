@@ -1,7 +1,7 @@
 import express from 'express';
 import db, { SYNCABLE_TABLES } from '../db.js';
 import { authenticateToken } from '../middleware/auth.js';
-import { getStatus, triggerSync } from '../sync-service.js';
+import { getStatus, triggerSync, forceFullSync } from '../sync-service.js';
 
 const router = express.Router();
 
@@ -47,6 +47,12 @@ router.put('/config', authenticateToken, requireAdmin, (req, res) => {
 /* ── Manual sync trigger ─────────────────────────────────────────────────── */
 router.post('/now', authenticateToken, requireAdmin, async (req, res) => {
   const result = await triggerSync();
+  res.json(result);
+});
+
+/* ── Full re-sync: reset watermark and pull everything again ─────────────── */
+router.post('/full', authenticateToken, requireAdmin, async (req, res) => {
+  const result = await forceFullSync();
   res.json(result);
 });
 

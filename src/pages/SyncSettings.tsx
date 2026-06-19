@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Cloud, CloudOff, RefreshCw, Save, Check } from 'lucide-react';
+import { Cloud, CloudOff, RefreshCw, Save, Check, DownloadCloud } from 'lucide-react';
 import { useStore } from '../store';
+import { confirmDialog, notify } from '../components/ui/Feedback';
 
 const TOKEN_KEY = 'maja-auth-token';
 const getToken = () => localStorage.getItem(TOKEN_KEY);
@@ -31,6 +32,7 @@ export function SyncSettings() {
   const [syncKey, setSyncKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [fullSyncing, setFullSyncing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const loadAll = useStore((s) => s.loadAll);
@@ -100,6 +102,31 @@ export function SyncSettings() {
     }
   }
 
+  async function handleFullSync() {
+    const ok = await confirmDialog({
+      title: 'Forzar re-sincronización completa',
+      message: 'Vuelve a bajar TODOS los datos desde la nube, ignorando la última marca de sincronización. Sirve cuando algo cargado en otra computadora no te aparece. Puede tardar un poco más. ¿Continuar?',
+      confirmLabel: 'Bajar todo de nuevo',
+    });
+    if (!ok) return;
+    setFullSyncing(true);
+    setError('');
+    try {
+      const res = await fetch('/api/sync/full', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      if (!data.ok) { setError(data.reason || 'Sin conexión'); }
+      else { await loadAll(true); notify('Re-sincronización completa lista. Revisá si ya aparece lo que faltaba.', 'success'); }
+      await loadStatus();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setFullSyncing(false);
+    }
+  }
+
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -151,6 +178,26 @@ export function SyncSettings() {
           </button>
         )}
       </div>
+
+      {/* Forzar re-sincronización completa */}
+      {status?.configured && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1">
+            <p className="font-medium text-sm text-amber-900">¿Algo cargado en otra PC no te aparece?</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Vuelve a bajar todos los datos desde la nube, ignorando la última marca de sincronización.
+            </p>
+          </div>
+          <button
+            onClick={handleFullSync}
+            disabled={fullSyncing || syncing}
+            className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border border-amber-300 bg-white text-amber-800 hover:bg-amber-100 disabled:opacity-50 transition-colors flex-shrink-0"
+          >
+            <DownloadCloud size={14} className={fullSyncing ? 'animate-pulse' : ''} />
+            {fullSyncing ? 'Bajando todo...' : 'Forzar re-sincronización completa'}
+          </button>
+        </div>
+      )}
 
       {/* Render URL */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
