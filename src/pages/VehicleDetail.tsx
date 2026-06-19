@@ -16,7 +16,16 @@ import {
 import { uploadVehicleImage } from '../utils/upload';
 import { TradeInSection, EMPTY_TRADEIN, toTradeInInput, type TradeInState } from '../components/TradeInSection';
 import { confirmDialog, notify } from '../components/ui/Feedback';
-import type { VehicleStatus, PaymentMethod } from '../types';
+import type { VehicleStatus, PaymentMethod, SalePayment, Cheque } from '../types';
+
+/** Borrador de cheque cargado dentro de una venta (se registra luego en el módulo Cheques). */
+type ChequeDraft = {
+  numero: string; banco: string; monto: number; moneda: 'ARS' | 'USD';
+  fechaVencimiento: string; tipo: 'al_dia' | 'diferido'; librador: string;
+};
+const emptyChequeDraft = (): ChequeDraft => ({
+  numero: '', banco: '', monto: 0, moneda: 'ARS', fechaVencimiento: '', tipo: 'diferido', librador: '',
+});
 
 const SENA_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'efectivo', label: 'Efectivo' },
@@ -51,7 +60,7 @@ const INITIAL_EXPENSE = { description: '', amount: 0, date: new Date().toISOStri
 export function VehicleDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { vehicles, expenses, suppliers, clients, updateVehicle, deleteVehicle, addExpense, deleteExpense, markExpensePaid, addTransaction, sellVehicle, revertSale } = useStore();
+  const { vehicles, expenses, suppliers, clients, updateVehicle, deleteVehicle, addExpense, deleteExpense, markExpensePaid, addTransaction, sellVehicle, revertSale, addSale } = useStore();
 
   const vehicle = vehicles.find((v) => v.id === id);
   const vExpenses = expenses.filter((e) => e.vehicleId === id);
@@ -66,7 +75,11 @@ export function VehicleDetail() {
   const [showCancelSenaModal, setShowCancelSenaModal] = useState(false);
   const [assignBuyerId, setAssignBuyerId] = useState('');
   const [expenseForm, setExpenseForm] = useState(INITIAL_EXPENSE);
-  const [sellForm, setSellForm] = useState({ soldPrice: 0, soldDate: new Date().toISOString().split('T')[0], clientId: '' });
+  const [sellForm, setSellForm] = useState({
+    soldPrice: 0, soldDate: new Date().toISOString().split('T')[0], clientId: '',
+    payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '',
+    senaAplicada: 0, cheques: [] as ChequeDraft[],
+  });
   const [sellTradeIn, setSellTradeIn] = useState<TradeInState>(EMPTY_TRADEIN);
   const [senaForm, setSenaForm] = useState({
     type: 'venta' as 'venta' | 'compra', amount: 0,
@@ -114,23 +127,84 @@ export function VehicleDetail() {
     updateVehicle(id!, { status: newStatus });
   };
 
+  // Seña activa de venta sobre este vehículo (ya cobrada) → se aplica como parte del pago.
+  const senaActivaVenta = vehicle.status === 'señado' && vehicle.senaType === 'venta'
+    ? (vehicle.senaAmount ?? 0) : 0;
+
   const openSellModal = () => {
     setSellForm({
       soldPrice: vehicle.soldPrice ?? vehicle.publishPrice ?? 0,
       soldDate: new Date().toISOString().split('T')[0],
       clientId: vehicle.senaClientId ?? '',
+      payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '',
+      senaAplicada: senaActivaVenta, cheques: [],
     });
     setSellTradeIn(EMPTY_TRADEIN);
     setShowSellModal(true);
   };
 
+  // Helpers de cheques-borrador dentro de la venta
+  const addSellChequeDraft = () => setSellForm((f) => ({ ...f, cheques: [...f.cheques, emptyChequeDraft()] }));
+  const updateSellChequeDraft = (i: number, patch: Partial<ChequeDraft>) =>
+    setSellForm((f) => ({ ...f, cheques: f.cheques.map((c, idx) => (idx === i ? { ...c, ...patch } : c)) }));
+  const removeSellChequeDraft = (i: number) =>
+    setSellForm((f) => ({ ...f, cheques: f.cheques.filter((_, idx) => idx !== i) }));
+
+  const sellChequesTotal = sellForm.cheques.reduce((a, c) => a + (c.monto || 0), 0);
+  const sellAssignedTotal =
+    sellForm.payEfectivo + sellForm.payTransferencia + sellForm.payPrendario +
+    sellChequesTotal + sellTradeIn.value + sellForm.senaAplicada;
+  const sellAssignedRemainder = sellForm.soldPrice - sellAssignedTotal;
+
   const handleSell = () => {
-    sellVehicle(id!, {
-      soldPrice: sellForm.soldPrice,
-      soldDate: sellForm.soldDate,
-      clientId: sellForm.clientId || undefined,
-      tradeIn: toTradeInInput(sellTradeIn),
-    });
+    if (!sellForm.soldPrice || sellForm.soldPrice <= 0) { notify('Poné el precio de venta.', 'error'); return; }
+
+    // Desglose de medios de pago
+    const paymentMethods: SalePayment[] = [];
+    if (sellForm.payEfectivo > 0) paymentMethods.push({ method: 'efectivo', amount: sellForm.payEfectivo });
+    if (sellForm.payTransferencia > 0) paymentMethods.push({ method: 'transferencia', amount: sellForm.payTransferencia });
+    if (sellForm.payPrendario > 0) paymentMethods.push({ method: 'credito_prendario', amount: sellForm.payPrendario, reference: sellForm.prendarioRef || undefined });
+    if (sellChequesTotal > 0) paymentMethods.push({ method: 'cheque', amount: sellChequesTotal });
+    if (sellTradeIn.value > 0) paymentMethods.push({ method: 'parte_pago', amount: sellTradeIn.value });
+    if (sellForm.senaAplicada > 0) paymentMethods.push({ method: 'sena', amount: sellForm.senaAplicada });
+
+    const hasBreakdown = paymentMethods.length > 0;
+
+    if (hasBreakdown) {
+      // Para registrar medios de pago / cheques hace falta saber a quién se le vendió.
+      if (!sellForm.clientId) { notify('Para registrar los medios de pago, elegí el comprador.', 'error'); return; }
+
+      const chequeDrafts: Omit<Cheque, 'id' | 'createdAt'>[] = sellForm.cheques
+        .filter((c) => c.numero || c.monto)
+        .map((c) => ({
+          numero: c.numero, serie: '', banco: c.banco, monto: c.monto, moneda: c.moneda,
+          fechaEmision: '', fechaVencimiento: c.fechaVencimiento, tipo: c.tipo,
+          alPortador: false, endosado: false, endosadoPor: '', dniEndosante: '',
+          librador: c.librador, cuitLibrador: '', recibidoDe: '', entregadoA: '',
+          estado: 'en_cartera', observaciones: 'Recibido por venta de vehículo',
+        }));
+
+      addSale(
+        {
+          vehicleId: id!, clientId: sellForm.clientId, saleDate: sellForm.soldDate,
+          salePrice: sellForm.soldPrice, paymentType: 'contado',
+          downPayment: 0, installments: 0, installmentAmount: 0, notes: '',
+          tradeInValue: sellTradeIn.value || undefined,
+          paymentMethods,
+        },
+        [],
+        chequeDrafts,
+        toTradeInInput(sellTradeIn),
+      );
+    } else {
+      // Sin desglose: venta simple (Finanzas toma el precio como plata líquida).
+      sellVehicle(id!, {
+        soldPrice: sellForm.soldPrice,
+        soldDate: sellForm.soldDate,
+        clientId: sellForm.clientId || undefined,
+        tradeIn: toTradeInInput(sellTradeIn),
+      });
+    }
     setShowSellModal(false);
   };
 
@@ -817,6 +891,92 @@ export function VehicleDetail() {
             </div>
           )}
           <TradeInSection value={sellTradeIn} onChange={setSellTradeIn} vehicles={vehicles} />
+
+          {/* Medios de pago */}
+          <div className="border border-brand-200 bg-brand-50/40 rounded-xl p-4 space-y-3">
+            <p className="text-sm font-semibold text-slate-700">¿Cómo te pagaron?</p>
+            <p className="text-[11px] text-slate-500 -mt-2">Cargá efectivo, transferencia, cheque, prendario o combinados. Para registrar cheques o medios de pago elegí el comprador arriba.</p>
+
+            {senaActivaVenta > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+                Este vehículo tiene una seña de {formatCurrency(senaActivaVenta)} ya cobrada, aplicada como parte del pago.
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input label="Efectivo ($)" type="number" value={sellForm.payEfectivo}
+                onChange={(e) => setSellForm((f) => ({ ...f, payEfectivo: +e.target.value }))} />
+              <Input label="Transferencia ($)" type="number" value={sellForm.payTransferencia}
+                onChange={(e) => setSellForm((f) => ({ ...f, payTransferencia: +e.target.value }))} />
+              <Input label="Crédito prendario ($)" type="number" value={sellForm.payPrendario}
+                onChange={(e) => setSellForm((f) => ({ ...f, payPrendario: +e.target.value }))} />
+              <Input label="Entidad del prendario (opcional)" value={sellForm.prendarioRef}
+                onChange={(e) => setSellForm((f) => ({ ...f, prendarioRef: e.target.value }))}
+                placeholder="Ej: Banco Nación" />
+              {sellForm.senaAplicada > 0 && (
+                <Input label="Seña aplicada ($)" type="number" value={sellForm.senaAplicada}
+                  onChange={(e) => setSellForm((f) => ({ ...f, senaAplicada: +e.target.value }))} />
+              )}
+            </div>
+
+            {/* Cheques */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-600">
+                  Cheques {sellChequesTotal > 0 && <span className="text-slate-400">· {formatCurrency(sellChequesTotal)}</span>}
+                </span>
+                <button type="button" onClick={addSellChequeDraft}
+                  className="text-xs font-semibold text-brand-600 hover:underline inline-flex items-center gap-1">
+                  <Plus size={12} /> Agregar cheque
+                </button>
+              </div>
+              {sellForm.cheques.map((c, i) => (
+                <div key={i} className="border border-slate-200 bg-white rounded-lg p-3 space-y-2 relative">
+                  <button type="button" onClick={() => removeSellChequeDraft(i)}
+                    className="absolute top-2 right-2 text-slate-300 hover:text-red-500" title="Quitar cheque">
+                    <X size={14} />
+                  </button>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <Input label="N° cheque" value={c.numero} onChange={(e) => updateSellChequeDraft(i, { numero: e.target.value })} />
+                    <Input label="Banco" value={c.banco} onChange={(e) => updateSellChequeDraft(i, { banco: e.target.value })} />
+                    <Input label="Monto ($)" type="number" value={c.monto} onChange={(e) => updateSellChequeDraft(i, { monto: +e.target.value })} />
+                    <Input label="Vencimiento" type="date" value={c.fechaVencimiento} onChange={(e) => updateSellChequeDraft(i, { fechaVencimiento: e.target.value })} />
+                    <Input label="Librador" value={c.librador} onChange={(e) => updateSellChequeDraft(i, { librador: e.target.value })} />
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Tipo / Moneda</label>
+                      <div className="flex gap-2">
+                        <select value={c.tipo} onChange={(e) => updateSellChequeDraft(i, { tipo: e.target.value as 'al_dia' | 'diferido' })}
+                          className="flex-1 px-2 py-2 text-sm border border-slate-300 rounded-lg bg-white">
+                          <option value="al_dia">Al día</option>
+                          <option value="diferido">Diferido</option>
+                        </select>
+                        <select value={c.moneda} onChange={(e) => updateSellChequeDraft(i, { moneda: e.target.value as 'ARS' | 'USD' })}
+                          className="w-20 px-2 py-2 text-sm border border-slate-300 rounded-lg bg-white">
+                          <option value="ARS">ARS</option>
+                          <option value="USD">USD</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {sellForm.cheques.length > 0 && (
+                <p className="text-[11px] text-slate-400">Los cheques se registran automáticamente en el módulo Cheques (recibidos del comprador, en cartera).</p>
+              )}
+            </div>
+
+            {/* Resumen asignado vs precio */}
+            {sellForm.soldPrice > 0 && sellAssignedTotal > 0 && (
+              <div className={`text-sm rounded-lg px-3 py-2 ${
+                Math.abs(sellAssignedRemainder) < 1 ? 'bg-green-50 text-green-800'
+                  : sellAssignedRemainder > 0 ? 'bg-slate-100 text-slate-700' : 'bg-red-50 text-red-700'
+              }`}>
+                Asignado: <span className="font-bold">{formatCurrency(sellAssignedTotal)}</span> de {formatCurrency(sellForm.soldPrice)}
+                {sellAssignedRemainder > 0 && <span> · Falta asignar {formatCurrency(sellAssignedRemainder)}</span>}
+                {sellAssignedRemainder < 0 && <span> · Te pasaste por {formatCurrency(-sellAssignedRemainder)}</span>}
+              </div>
+            )}
+          </div>
         </div>
       </Modal>
 
