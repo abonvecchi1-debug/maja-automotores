@@ -36,7 +36,9 @@ function startUpdateChecks() {
   setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 2 * 60 * 60 * 1000);
 }
 
-const PORT = 3001;
+// Puerto propio de la app de escritorio (distinto de 3001 para no chocar con
+// servidores de desarrollo de otros proyectos que usan el puerto por defecto).
+const PORT = 3917;
 let mainWindow = null;
 
 function waitForServer() {
