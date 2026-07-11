@@ -67,9 +67,13 @@ router.get('/pull', syncKeyAuth, (req, res) => {
   const result = {};
 
   if (hasCursor) {
-    // Capturar la marca ANTES de leer: cualquier fila que entre durante/después de
-    // esta lectura tendrá server_updated_at >= serverNow y la agarra el próximo pull.
-    const serverNow = new Date().toISOString();
+    // Marca capturada ANTES de leer. El cursor devuelto lleva un margen hacia atrás
+    // (SAFETY_MS) para NO perder una fila que se selle en el mismo milisegundo del
+    // corte: el filtro es estricto (`>`), así que sin margen una fila con
+    // server_updated_at == cursor quedaría afuera para siempre. El margen re-baja
+    // unos pocos segundos de solape (idempotente) a cambio de no saltear nunca.
+    const SAFETY_MS = 3000;
+    const serverNow = Date.now();
     const cursor = req.query.cursor || '2000-01-01T00:00:00Z';
     for (const table of SYNCABLE_TABLES) {
       try {
@@ -79,7 +83,8 @@ router.get('/pull', syncKeyAuth, (req, res) => {
       }
     }
     result._deletions = db.prepare(`SELECT * FROM sync_deletions WHERE server_deleted_at > ?`).all(cursor);
-    result._cursor = serverNow;
+    result._cursor = new Date(serverNow - SAFETY_MS).toISOString();
+    result._serverTime = new Date(serverNow).toISOString(); // para detectar reloj desfasado en el cliente
   } else {
     const since = req.query.since || '2000-01-01T00:00:00Z';
     for (const table of SYNCABLE_TABLES) {

@@ -41,8 +41,8 @@ function exportStockPDF(list: Vehicle[]) {
       String(i + 1),
       v.brand,
       v.model,
-      String(v.year),
-      formatKm(v.km),
+      v.year ? String(v.year) : '-',
+      v.km != null ? formatKm(v.km) : '-',
       v.color || '-',
     ]),
     headStyles: { fillColor: NAVY, fontSize: 10 },
@@ -187,10 +187,11 @@ export function Vehicles() {
   const field = (key: keyof typeof INITIAL_FORM, value: string | number) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  // Exporta el catálogo PDF (sin precios) de los autos en stock según el filtro actual.
+  // Exporta el catálogo PDF (sin precios) de los autos disponibles según el filtro actual.
+  // Excluye vendidos y señados (reservados): no se ofrecen a otras agencias.
   const handleExportStock = () => {
-    const stock = filtered.filter((v) => v.status !== 'vendido');
-    if (stock.length === 0) { notify('No hay autos en stock para exportar.', 'error'); return; }
+    const stock = filtered.filter((v) => v.status !== 'vendido' && v.status !== 'señado');
+    if (stock.length === 0) { notify('No hay autos disponibles para exportar.', 'error'); return; }
     exportStockPDF(stock);
   };
 

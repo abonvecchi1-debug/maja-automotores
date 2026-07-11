@@ -8,6 +8,7 @@ let state = {
   syncing: false,
   lastSync: null,
   error: null,
+  clockSkewMs: null,   // diferencia reloj local vs servidor (positivo = PC adelantada)
 };
 
 let intervalId = null;
@@ -119,8 +120,8 @@ async function pull(renderUrl, apiKey, cursor, pushSince) {
   });
   if (!res.ok) throw new Error(`Pull HTTP ${res.status}`);
   const raw = await res.json();
-  const { _deletions: deletions = [], _cursor: newCursor, ...records } = raw;
-  return { records, deletions, newCursor };
+  const { _deletions: deletions = [], _cursor: newCursor, _serverTime: serverTime, ...records } = raw;
+  return { records, deletions, newCursor, serverTime };
 }
 
 /* ── Push to Render ─────────────────────────────────────────────────────── */
@@ -161,16 +162,24 @@ async function sync() {
     const pushSince = getLastSync();  // qué subimos (reloj local)
     const syncStart = new Date().toISOString();
 
-    const { records: remoteData, deletions: remoteDeletions, newCursor } = await pull(renderUrl, apiKey, cursor, pushSince);
+    const { records: remoteData, deletions: remoteDeletions, newCursor, serverTime } = await pull(renderUrl, apiKey, cursor, pushSince);
     for (const [table, records] of Object.entries(remoteData)) {
       upsertRecords(table, records);
     }
     applyDeletions(remoteDeletions);
 
+    // Avanzar el cursor de pull EN CUANTO el pull se aplicó bien: así un push que falle
+    // (Render caído un momento) no obliga a re-bajar la misma ventana en cada ciclo.
+    if (newCursor) setCursor(newCursor);
+
+    // Detectar reloj desfasado (causa raíz de conflictos que pisan datos entre PCs).
+    if (serverTime) {
+      state.clockSkewMs = Date.now() - Date.parse(serverTime);
+    }
+
     await push(renderUrl, apiKey, pushSince);
 
-    // Cursor de pull lo dicta el servidor; watermark de push avanza con el reloj local.
-    if (newCursor) setCursor(newCursor);
+    // Watermark de push avanza con el reloj local.
     setLastSync(syncStart);
     state.lastSync = syncStart;
     console.log(`[sync] completed at ${syncStart}`);

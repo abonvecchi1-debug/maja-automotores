@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Cloud, CloudOff, RefreshCw, Save, Check, DownloadCloud } from 'lucide-react';
+import { Cloud, CloudOff, RefreshCw, Save, Check, DownloadCloud, AlertTriangle } from 'lucide-react';
 import { useStore } from '../store';
 import { confirmDialog, notify } from '../components/ui/Feedback';
 
@@ -18,6 +18,7 @@ interface SyncStatus {
   lastSync: string | null;
   configured: boolean;
   error: string | null;
+  clockSkewMs: number | null;
 }
 
 function fmtDate(iso: string | null) {
@@ -178,6 +179,22 @@ export function SyncSettings() {
           </button>
         )}
       </div>
+
+      {/* Aviso de reloj desfasado — causa raíz de que dos PC se pisen los datos */}
+      {status?.configured && status.clockSkewMs != null && Math.abs(status.clockSkewMs) > 90_000 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-sm text-red-900">
+              El reloj de esta computadora está desfasado {Math.abs(Math.round(status.clockSkewMs / 60000))} min respecto del servidor.
+            </p>
+            <p className="text-xs text-red-700 mt-0.5">
+              Esto puede hacer que se pisen datos entre las computadoras (una versión vieja gana sobre una nueva).
+              Ajustá la fecha y hora de esta PC (activá "hora automática" en Windows) para evitarlo.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Forzar re-sincronización completa */}
       {status?.configured && (

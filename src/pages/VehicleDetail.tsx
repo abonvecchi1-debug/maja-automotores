@@ -17,6 +17,7 @@ import { uploadVehicleImage } from '../utils/upload';
 import { TradeInSection, EMPTY_TRADEIN, toTradeInInput, type TradeInState } from '../components/TradeInSection';
 import { confirmDialog, notify } from '../components/ui/Feedback';
 import type { VehicleStatus, PaymentMethod, SalePayment, Cheque } from '../types';
+import { LIQUID_METHODS } from '../types';
 
 /** Borrador de cheque cargado dentro de una venta (se registra luego en el módulo Cheques). */
 type ChequeDraft = {
@@ -166,7 +167,14 @@ export function VehicleDetail() {
     if (sellForm.payPrendario > 0) paymentMethods.push({ method: 'credito_prendario', amount: sellForm.payPrendario, reference: sellForm.prendarioRef || undefined });
     if (sellChequesTotal > 0) paymentMethods.push({ method: 'cheque', amount: sellChequesTotal });
     if (sellTradeIn.value > 0) paymentMethods.push({ method: 'parte_pago', amount: sellTradeIn.value });
-    if (sellForm.senaAplicada > 0) paymentMethods.push({ method: 'sena', amount: sellForm.senaAplicada });
+    if (sellForm.senaAplicada > 0) {
+      // La seña ya cobrada se aplica con su método real: efectivo/transferencia es
+      // líquida ('sena'); si fue cheque/prendario NO es líquida y se representa con su
+      // método para que Finanzas no la cuente como plata en mano (evita dinero fantasma).
+      const senaMethodApplied: PaymentMethod =
+        vehicle.senaMethod && !LIQUID_METHODS.includes(vehicle.senaMethod) ? vehicle.senaMethod : 'sena';
+      paymentMethods.push({ method: senaMethodApplied, amount: sellForm.senaAplicada });
+    }
 
     const hasBreakdown = paymentMethods.length > 0;
 
@@ -899,7 +907,9 @@ export function VehicleDetail() {
 
             {senaActivaVenta > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
-                Este vehículo tiene una seña de {formatCurrency(senaActivaVenta)} ya cobrada, aplicada como parte del pago.
+                Este vehículo tiene una seña de {formatCurrency(senaActivaVenta)} ya cobrada
+                {vehicle.senaMethod && ` (${SENA_METHODS.find((m) => m.value === vehicle.senaMethod)?.label ?? vehicle.senaMethod})`}
+                , aplicada como parte del pago.
               </div>
             )}
 
@@ -913,10 +923,6 @@ export function VehicleDetail() {
               <Input label="Entidad del prendario (opcional)" value={sellForm.prendarioRef}
                 onChange={(e) => setSellForm((f) => ({ ...f, prendarioRef: e.target.value }))}
                 placeholder="Ej: Banco Nación" />
-              {sellForm.senaAplicada > 0 && (
-                <Input label="Seña aplicada ($)" type="number" value={sellForm.senaAplicada}
-                  onChange={(e) => setSellForm((f) => ({ ...f, senaAplicada: +e.target.value }))} />
-              )}
             </div>
 
             {/* Cheques */}
