@@ -31,12 +31,24 @@ function getApiKey() {
   );
 }
 
+// Watermark de PUSH (reloj local): qué cambios propios ya subimos.
 function getLastSync() {
   return db.prepare("SELECT value FROM sync_config WHERE key = 'last_sync_at'").get()?.value || '2000-01-01T00:00:00Z';
 }
 
 function setLastSync(ts) {
   db.prepare("INSERT OR REPLACE INTO sync_config (key, value) VALUES ('last_sync_at', ?)").run(ts);
+}
+
+// Cursor de PULL (reloj del servidor): hasta dónde ya bajamos. Lo maneja Render,
+// por eso no depende del reloj de esta PC. Si Render es viejo y no lo devuelve,
+// queda en epoch y al actualizarse Render la próxima sincronización baja todo.
+function getCursor() {
+  return db.prepare("SELECT value FROM sync_config WHERE key = 'sync_cursor'").get()?.value || '2000-01-01T00:00:00Z';
+}
+
+function setCursor(ts) {
+  db.prepare("INSERT OR REPLACE INTO sync_config (key, value) VALUES ('sync_cursor', ?)").run(ts);
 }
 
 /* ── Connectivity ───────────────────────────────────────────────────────── */
@@ -97,15 +109,18 @@ function applyDeletions(deletions) {
 
 /* ── Pull from Render ───────────────────────────────────────────────────── */
 
-async function pull(renderUrl, apiKey, since) {
-  const res = await fetch(`${renderUrl}/api/sync/pull?since=${encodeURIComponent(since)}`, {
+async function pull(renderUrl, apiKey, cursor, pushSince) {
+  // `cursor` (marca del servidor) es lo que usa Render nuevo; `since` mantiene
+  // compatibilidad con Render viejo (filtra por updated_at). Mandamos ambos.
+  const url = `${renderUrl}/api/sync/pull?cursor=${encodeURIComponent(cursor)}&since=${encodeURIComponent(pushSince)}`;
+  const res = await fetch(url, {
     headers: { 'X-Sync-Key': apiKey },
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`Pull HTTP ${res.status}`);
   const raw = await res.json();
-  const { _deletions: deletions = [], ...records } = raw;
-  return { records, deletions };
+  const { _deletions: deletions = [], _cursor: newCursor, ...records } = raw;
+  return { records, deletions, newCursor };
 }
 
 /* ── Push to Render ─────────────────────────────────────────────────────── */
@@ -142,17 +157,20 @@ async function sync() {
   state.error = null;
 
   try {
-    const since = getLastSync();
+    const cursor = getCursor();       // hasta dónde bajamos (reloj del servidor)
+    const pushSince = getLastSync();  // qué subimos (reloj local)
     const syncStart = new Date().toISOString();
 
-    const { records: remoteData, deletions: remoteDeletions } = await pull(renderUrl, apiKey, since);
+    const { records: remoteData, deletions: remoteDeletions, newCursor } = await pull(renderUrl, apiKey, cursor, pushSince);
     for (const [table, records] of Object.entries(remoteData)) {
       upsertRecords(table, records);
     }
     applyDeletions(remoteDeletions);
 
-    await push(renderUrl, apiKey, since);
+    await push(renderUrl, apiKey, pushSince);
 
+    // Cursor de pull lo dicta el servidor; watermark de push avanza con el reloj local.
+    if (newCursor) setCursor(newCursor);
     setLastSync(syncStart);
     state.lastSync = syncStart;
     console.log(`[sync] completed at ${syncStart}`);
@@ -197,7 +215,8 @@ export async function forceFullSync() {
     return { ok: false, reason: 'offline' };
   }
   state.online = true;
-  setLastSync('2000-01-01T00:00:00Z');
+  setCursor('2000-01-01T00:00:00Z');   // resetea el cursor de pull → baja todo de nuevo
+  setLastSync('2000-01-01T00:00:00Z'); // resetea el watermark de push → re-sube todo
   await sync();
   return { ok: true };
 }

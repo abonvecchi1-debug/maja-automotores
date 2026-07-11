@@ -386,4 +386,17 @@ for (const t of SYNCABLE_TABLES) {
   `);
 }
 
+// ── Cursor de sincronización controlado por el servidor ─────────────────────
+// El servidor (Render) sella cada fila con SU propio reloj (server_updated_at) al
+// recibirla en /push, y los clientes piden "lo nuevo" contra esa marca del servidor
+// en lugar de su reloj local. Así un dispositivo con el reloj corrido no puede quedar
+// atrás nunca más. En un cliente de escritorio estas columnas quedan sin uso (inofensivas).
+// Aditivo y retrocompatible (los clientes viejos siguen usando updated_at por `since`).
+for (const t of SYNCABLE_TABLES) {
+  try { db.exec(`ALTER TABLE ${t} ADD COLUMN server_updated_at TEXT`); } catch {}
+  try { db.exec(`UPDATE ${t} SET server_updated_at = updated_at WHERE server_updated_at IS NULL`); } catch {}
+}
+try { db.exec(`ALTER TABLE sync_deletions ADD COLUMN server_deleted_at TEXT`); } catch {}
+try { db.exec(`UPDATE sync_deletions SET server_deleted_at = deleted_at WHERE server_deleted_at IS NULL`); } catch {}
+
 export default db;

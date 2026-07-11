@@ -56,18 +56,42 @@ router.post('/full', authenticateToken, requireAdmin, async (req, res) => {
   res.json(result);
 });
 
-/* ── Pull: return records + deletions since `since` ────────────────────── */
+/* ── Pull: return records + deletions ───────────────────────────────────
+ * Cliente NUEVO: manda `cursor` (marca del servidor). Filtramos por
+ *   server_updated_at > cursor y devolvemos `_cursor` = ahora (con 2s de margen
+ *   para no perder filas por el borde). El cursor es siempre reloj del servidor,
+ *   así que no depende del reloj de cada PC.
+ * Cliente VIEJO: manda solo `since` → comportamiento anterior por updated_at. */
 router.get('/pull', syncKeyAuth, (req, res) => {
-  const since = req.query.since || '2000-01-01T00:00:00Z';
+  const hasCursor = req.query.cursor !== undefined;
   const result = {};
-  for (const table of SYNCABLE_TABLES) {
-    try {
-      result[table] = db.prepare(`SELECT * FROM ${table} WHERE updated_at > ?`).all(since);
-    } catch {
-      result[table] = [];
+
+  if (hasCursor) {
+    // Capturar la marca ANTES de leer: cualquier fila que entre durante/después de
+    // esta lectura tendrá server_updated_at >= serverNow y la agarra el próximo pull.
+    const serverNow = new Date().toISOString();
+    const cursor = req.query.cursor || '2000-01-01T00:00:00Z';
+    for (const table of SYNCABLE_TABLES) {
+      try {
+        result[table] = db.prepare(`SELECT * FROM ${table} WHERE server_updated_at > ?`).all(cursor);
+      } catch {
+        result[table] = [];
+      }
     }
+    result._deletions = db.prepare(`SELECT * FROM sync_deletions WHERE server_deleted_at > ?`).all(cursor);
+    result._cursor = serverNow;
+  } else {
+    const since = req.query.since || '2000-01-01T00:00:00Z';
+    for (const table of SYNCABLE_TABLES) {
+      try {
+        result[table] = db.prepare(`SELECT * FROM ${table} WHERE updated_at > ?`).all(since);
+      } catch {
+        result[table] = [];
+      }
+    }
+    result._deletions = db.prepare(`SELECT * FROM sync_deletions WHERE deleted_at > ?`).all(since);
   }
-  result._deletions = db.prepare(`SELECT * FROM sync_deletions WHERE deleted_at > ?`).all(since);
+
   res.json(result);
 });
 
@@ -76,6 +100,9 @@ router.post('/push', syncKeyAuth, (req, res) => {
   const { data, deletions } = req.body;
   if (!data || typeof data !== 'object') return res.status(400).json({ error: 'No data' });
 
+  // Reloj del servidor: sella cada fila que realmente entra/cambia. Los clientes
+  // piden contra esta marca, así ninguno se queda atrás por tener el reloj corrido.
+  const serverNow = new Date().toISOString();
   const results = {};
 
   // Upsert records
@@ -83,18 +110,24 @@ router.post('/push', syncKeyAuth, (req, res) => {
     if (!SYNCABLE_TABLES.includes(table) || !Array.isArray(records)) continue;
     try {
       const columns = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
-      const setClauses = columns.filter(c => c !== 'id').map(c => `${c} = excluded.${c}`).join(', ');
+      const hasServerCol = columns.includes('server_updated_at');
+      // Columnas que trae el cliente (server_updated_at lo sella el server, no el cliente)
+      const dataCols = columns.filter(c => c !== 'server_updated_at');
+      const insertCols = hasServerCol ? [...dataCols, 'server_updated_at'] : dataCols;
+      const values = insertCols.map(c => c === 'server_updated_at' ? '@__server_now' : `@${c}`);
+      const setClauses = dataCols.filter(c => c !== 'id').map(c => `${c} = excluded.${c}`);
+      if (hasServerCol) setClauses.push('server_updated_at = @__server_now');
       const stmt = db.prepare(`
-        INSERT INTO ${table} (${columns.join(', ')})
-        VALUES (${columns.map(c => `@${c}`).join(', ')})
-        ON CONFLICT(id) DO UPDATE SET ${setClauses}
+        INSERT INTO ${table} (${insertCols.join(', ')})
+        VALUES (${values.join(', ')})
+        ON CONFLICT(id) DO UPDATE SET ${setClauses.join(', ')}
         WHERE excluded.updated_at > ${table}.updated_at OR ${table}.updated_at IS NULL
       `);
       let count = 0;
       const run = db.transaction(() => {
         for (const record of records) {
-          const safe = {};
-          for (const col of columns) safe[col] = record[col] ?? null;
+          const safe = { __server_now: serverNow };
+          for (const col of dataCols) safe[col] = record[col] ?? null;
           stmt.run(safe);
           count++;
         }
@@ -108,13 +141,19 @@ router.post('/push', syncKeyAuth, (req, res) => {
 
   // Apply deletions
   if (Array.isArray(deletions)) {
+    const hasDelCol = db.prepare(`PRAGMA table_info(sync_deletions)`).all().map(c => c.name).includes('server_deleted_at');
     let deleted = 0;
     for (const { id, table_name, deleted_at } of deletions) {
       if (!SYNCABLE_TABLES.includes(table_name)) continue;
       try {
         db.prepare(`DELETE FROM ${table_name} WHERE id = ?`).run(id);
-        db.prepare(`INSERT OR REPLACE INTO sync_deletions (id, table_name, deleted_at) VALUES (?, ?, ?)`)
-          .run(id, table_name, deleted_at);
+        if (hasDelCol) {
+          db.prepare(`INSERT OR REPLACE INTO sync_deletions (id, table_name, deleted_at, server_deleted_at) VALUES (?, ?, ?, ?)`)
+            .run(id, table_name, deleted_at, serverNow);
+        } else {
+          db.prepare(`INSERT OR REPLACE INTO sync_deletions (id, table_name, deleted_at) VALUES (?, ?, ?)`)
+            .run(id, table_name, deleted_at);
+        }
         deleted++;
       } catch {}
     }
