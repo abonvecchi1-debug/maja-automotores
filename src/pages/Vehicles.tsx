@@ -1,6 +1,8 @@
 import { useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Car, ChevronRight, X, ImagePlus } from 'lucide-react';
+import { Plus, Search, Car, ChevronRight, X, ImagePlus, FileText } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useStore } from '../store';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -14,7 +16,49 @@ import {
 } from '../utils/formatters';
 import { uploadVehicleImage } from '../utils/upload';
 import { notify } from '../components/ui/Feedback';
-import type { VehicleStatus } from '../types';
+import type { VehicleStatus, Vehicle } from '../types';
+
+// Catálogo PDF de autos en stock SIN precios, para ofrecer a otras agencias.
+function exportStockPDF(list: Vehicle[]) {
+  const doc = new jsPDF();
+  const NAVY: [number, number, number] = [38, 46, 99];
+
+  doc.setFillColor(...NAVY);
+  doc.rect(0, 0, 210, 32, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.text('MAJA AUTOMOTORES', 14, 15);
+  doc.setFontSize(11);
+  doc.text('Vehículos disponibles', 14, 24);
+  doc.setFontSize(9);
+  doc.text(`Generado: ${new Date().toLocaleDateString('es-AR')}`, 196, 15, { align: 'right' });
+  doc.text(`${list.length} unidad${list.length === 1 ? '' : 'es'}`, 196, 22, { align: 'right' });
+
+  autoTable(doc, {
+    startY: 40,
+    head: [['#', 'Marca', 'Modelo', 'Año', 'Kilómetros', 'Color']],
+    body: list.map((v, i) => [
+      String(i + 1),
+      v.brand,
+      v.model,
+      String(v.year),
+      formatKm(v.km),
+      v.color || '-',
+    ]),
+    headStyles: { fillColor: NAVY, fontSize: 10 },
+    bodyStyles: { fontSize: 10 },
+    alternateRowStyles: { fillColor: [244, 246, 252] },
+    columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 3: { halign: 'center' }, 4: { halign: 'right' } },
+    margin: { left: 14, right: 14 },
+  });
+
+  const y = (doc as any).lastAutoTable.finalY + 10;
+  doc.setTextColor(90);
+  doc.setFontSize(9);
+  doc.text('Consultanos por disponibilidad y condiciones — Maja Automotores.', 14, Math.min(y, 288));
+
+  doc.save(`maja-stock-${new Date().toISOString().split('T')[0]}.pdf`);
+}
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos los estados' },
@@ -143,6 +187,13 @@ export function Vehicles() {
   const field = (key: keyof typeof INITIAL_FORM, value: string | number) =>
     setForm((f) => ({ ...f, [key]: value }));
 
+  // Exporta el catálogo PDF (sin precios) de los autos en stock según el filtro actual.
+  const handleExportStock = () => {
+    const stock = filtered.filter((v) => v.status !== 'vendido');
+    if (stock.length === 0) { notify('No hay autos en stock para exportar.', 'error'); return; }
+    exportStockPDF(stock);
+  };
+
   return (
     <div className="p-4 sm:p-6 space-y-5">
       {/* Header */}
@@ -151,9 +202,14 @@ export function Vehicles() {
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Vehículos</h1>
           <p className="text-slate-500 text-sm mt-0.5">{vehicles.length} vehículos registrados</p>
         </div>
-        <Button onClick={() => setShowModal(true)}>
-          <Plus size={16} /> <span className="hidden sm:inline">Nuevo vehículo</span><span className="sm:hidden">Nuevo</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExportStock}>
+            <FileText size={16} /> <span className="hidden sm:inline">Catálogo PDF</span><span className="sm:hidden">PDF</span>
+          </Button>
+          <Button onClick={() => setShowModal(true)}>
+            <Plus size={16} /> <span className="hidden sm:inline">Nuevo vehículo</span><span className="sm:hidden">Nuevo</span>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
