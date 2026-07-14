@@ -80,6 +80,7 @@ export function VehicleDetail() {
     soldPrice: 0, soldDate: new Date().toISOString().split('T')[0], clientId: '',
     payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '',
     senaAplicada: 0, cheques: [] as ChequeDraft[],
+    financiaPropia: false, cuotas: 12,
   });
   const [sellTradeIn, setSellTradeIn] = useState<TradeInState>(EMPTY_TRADEIN);
   const [senaForm, setSenaForm] = useState({
@@ -139,6 +140,7 @@ export function VehicleDetail() {
       clientId: vehicle.senaClientId ?? '',
       payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '',
       senaAplicada: senaActivaVenta, cheques: [],
+      financiaPropia: false, cuotas: 12,
     });
     setSellTradeIn(EMPTY_TRADEIN);
     setShowSellModal(true);
@@ -156,11 +158,15 @@ export function VehicleDetail() {
     sellForm.payEfectivo + sellForm.payTransferencia + sellForm.payPrendario +
     sellChequesTotal + sellTradeIn.value + sellForm.senaAplicada;
   const sellAssignedRemainder = sellForm.soldPrice - sellAssignedTotal;
+  // Financiación propia (cuotas nuestras, sin interés): la entrega es lo asignado arriba,
+  // y el resto se divide en N cuotas iguales mensuales.
+  const sellFinancing = sellForm.financiaPropia && sellForm.cuotas > 0 && sellAssignedRemainder > 0;
+  const sellCuotaAmount = sellFinancing ? sellAssignedRemainder / sellForm.cuotas : 0;
 
   const handleSell = () => {
     if (!sellForm.soldPrice || sellForm.soldPrice <= 0) { notify('Poné el precio de venta.', 'error'); return; }
 
-    // Desglose de medios de pago
+    // Desglose de medios de pago (la "entrega")
     const paymentMethods: SalePayment[] = [];
     if (sellForm.payEfectivo > 0) paymentMethods.push({ method: 'efectivo', amount: sellForm.payEfectivo });
     if (sellForm.payTransferencia > 0) paymentMethods.push({ method: 'transferencia', amount: sellForm.payTransferencia });
@@ -178,9 +184,9 @@ export function VehicleDetail() {
 
     const hasBreakdown = paymentMethods.length > 0;
 
-    if (hasBreakdown) {
-      // Para registrar medios de pago / cheques hace falta saber a quién se le vendió.
-      if (!sellForm.clientId) { notify('Para registrar los medios de pago, elegí el comprador.', 'error'); return; }
+    if (hasBreakdown || sellFinancing) {
+      // Para registrar medios de pago / cheques / cuotas hace falta saber a quién se le vendió.
+      if (!sellForm.clientId) { notify('Para registrar los medios de pago o las cuotas, elegí el comprador.', 'error'); return; }
 
       const chequeDrafts: Omit<Cheque, 'id' | 'createdAt'>[] = sellForm.cheques
         .filter((c) => c.numero || c.monto)
@@ -192,20 +198,33 @@ export function VehicleDetail() {
           estado: 'en_cartera', observaciones: 'Recibido por venta de vehículo',
         }));
 
+      // Cuotas propias sin interés: entrega = lo asignado, resto en N cuotas mensuales iguales.
+      const payments = sellFinancing
+        ? Array.from({ length: sellForm.cuotas }, (_, i) => {
+            const due = new Date(sellForm.soldDate);
+            due.setMonth(due.getMonth() + i + 1);
+            return { saleId: '', installmentNumber: i + 1, dueDate: due.toISOString().split('T')[0], amount: sellCuotaAmount, paid: false };
+          })
+        : [];
+
       addSale(
         {
           vehicleId: id!, clientId: sellForm.clientId, saleDate: sellForm.soldDate,
-          salePrice: sellForm.soldPrice, paymentType: 'contado',
-          downPayment: 0, installments: 0, installmentAmount: 0, notes: '',
+          salePrice: sellForm.soldPrice,
+          paymentType: sellFinancing ? 'financiado' : 'contado',
+          downPayment: sellFinancing ? sellAssignedTotal : 0,
+          installments: sellFinancing ? sellForm.cuotas : 0,
+          installmentAmount: sellCuotaAmount,
+          notes: '',
           tradeInValue: sellTradeIn.value || undefined,
-          paymentMethods,
+          paymentMethods: paymentMethods.length ? paymentMethods : undefined,
         },
-        [],
+        payments,
         chequeDrafts,
         toTradeInInput(sellTradeIn),
       );
     } else {
-      // Sin desglose: venta simple (Finanzas toma el precio como plata líquida).
+      // Sin desglose ni cuotas: venta simple (Finanzas toma el precio como plata líquida).
       sellVehicle(id!, {
         soldPrice: sellForm.soldPrice,
         soldDate: sellForm.soldDate,
@@ -983,6 +1002,39 @@ export function VehicleDetail() {
               </div>
             )}
           </div>
+
+          {/* Financiación propia — cuotas nuestras, sin interés */}
+          {sellForm.soldPrice > 0 && sellAssignedRemainder > 0 && (
+            <div className="border border-indigo-200 bg-indigo-50/40 rounded-xl p-4 space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox" checked={sellForm.financiaPropia}
+                  onChange={(e) => setSellForm((f) => ({ ...f, financiaPropia: e.target.checked }))}
+                  className="w-4 h-4 accent-indigo-600"
+                />
+                <span className="text-sm font-semibold text-slate-700">Lo financiás vos: el resto en cuotas (sin interés)</span>
+              </label>
+              {sellForm.financiaPropia && (
+                <>
+                  <Input
+                    label="Cantidad de cuotas" type="number" value={sellForm.cuotas}
+                    onChange={(e) => setSellForm((f) => ({ ...f, cuotas: +e.target.value }))}
+                  />
+                  {sellFinancing && (
+                    <div className="text-sm bg-white border border-indigo-200 rounded-lg px-3 py-2 text-slate-700">
+                      Entrega ahora: <span className="font-semibold">{formatCurrency(sellAssignedTotal)}</span>
+                      {' · '}Resto a financiar: <span className="font-semibold">{formatCurrency(sellAssignedRemainder)}</span>
+                      <div className="mt-1">
+                        {sellForm.cuotas} cuota{sellForm.cuotas !== 1 ? 's' : ''} de{' '}
+                        <span className="font-bold text-indigo-700">{formatCurrency(sellCuotaAmount)}</span> por mes
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-slate-500">Se registran las cuotas para seguir la deuda del cliente. Elegí el comprador arriba.</p>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </Modal>
 

@@ -133,8 +133,12 @@ export function ClientDetail() {
   const handleAddSale = () => {
     if (!saleForm.vehicleId) { notify('Elegí el vehículo que vendés.', 'error'); return; }
     if (!saleForm.salePrice || saleForm.salePrice <= 0) { notify('Poné el precio de venta.', 'error'); return; }
+    // La "entrega" del financiado = lo asignado en medios de pago (efectivo, transfer,
+    // cheque, parte de pago, seña). El resto se divide en N cuotas iguales sin interés.
+    const entregaFinanciado = saleForm.payEfectivo + saleForm.payTransferencia + saleForm.payPrendario +
+      saleForm.cheques.reduce((a, c) => a + (c.monto || 0), 0) + tradeIn.value + saleForm.senaAplicada;
     const installmentAmount = saleForm.paymentType === 'financiado' && saleForm.installments > 0
-      ? (saleForm.salePrice - saleForm.downPayment) / saleForm.installments : 0;
+      ? (saleForm.salePrice - entregaFinanciado) / saleForm.installments : 0;
     const payments = saleForm.paymentType === 'financiado'
       ? Array.from({ length: saleForm.installments }, (_, i) => {
           const due = new Date(saleForm.saleDate);
@@ -174,7 +178,8 @@ export function ClientDetail() {
       {
         vehicleId: saleForm.vehicleId, clientId: id!, saleDate: saleForm.saleDate,
         salePrice: saleForm.salePrice, paymentType: saleForm.paymentType,
-        downPayment: saleForm.downPayment, installments: saleForm.installments,
+        downPayment: saleForm.paymentType === 'financiado' ? entregaFinanciado : 0,
+        installments: saleForm.installments,
         installmentAmount, notes: saleForm.notes,
         invoiceNumber: saleForm.invoiceNumber || undefined,
         tradeInValue: tradeIn.value || undefined,
@@ -465,25 +470,29 @@ export function ClientDetail() {
             label="Forma de pago"
             value={saleForm.paymentType}
             onChange={(e) => setSaleForm((f) => ({ ...f, paymentType: e.target.value as 'contado' | 'financiado' }))}
-            options={[{ value: 'contado', label: 'Contado' }, { value: 'financiado', label: 'Financiado en cuotas' }]}
+            options={[{ value: 'contado', label: 'Contado' }, { value: 'financiado', label: 'Financiado (cuotas propias, sin interés)' }]}
           />
           {saleForm.paymentType === 'financiado' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-xl">
-              <Input
-                label="Entrega / Seña ($)" type="number" value={saleForm.downPayment}
-                onChange={(e) => setSaleForm((f) => ({ ...f, downPayment: +e.target.value }))}
-              />
+            <div className="p-4 bg-slate-50 rounded-xl space-y-3">
               <Input
                 label="Cantidad de cuotas" type="number" value={saleForm.installments}
                 onChange={(e) => setSaleForm((f) => ({ ...f, installments: +e.target.value }))}
               />
               {saleForm.salePrice > 0 && saleForm.installments > 0 && (
-                <div className="col-span-1 sm:col-span-2 text-sm text-slate-700 bg-white rounded-lg p-3 border border-slate-200">
-                  Cuota mensual: <span className="font-bold text-brand-600">
-                    {formatCurrency((saleForm.salePrice - saleForm.downPayment) / saleForm.installments)}
-                  </span>
+                <div className="text-sm text-slate-700 bg-white rounded-lg p-3 border border-slate-200">
+                  Entrega: <span className="font-semibold">{formatCurrency(assignedTotal)}</span>
+                  {' · '}Resto a financiar: <span className="font-semibold">{formatCurrency(Math.max(0, saleForm.salePrice - assignedTotal))}</span>
+                  <div className="mt-1">
+                    {saleForm.installments} cuota{saleForm.installments !== 1 ? 's' : ''} de{' '}
+                    <span className="font-bold text-brand-600">
+                      {formatCurrency(Math.max(0, saleForm.salePrice - assignedTotal) / saleForm.installments)}
+                    </span> por mes (sin interés)
+                  </div>
                 </div>
               )}
+              <p className="text-[11px] text-slate-500">
+                La entrega se carga abajo en "Medios de pago" (efectivo, transferencia, cheque o auto en parte de pago).
+              </p>
             </div>
           )}
           {/* Parte de pago */}
