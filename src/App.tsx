@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -39,13 +39,26 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
   }, [isAuthenticated, initialized, loadAll]);
 
   // Refresco en segundo plano: trae lo que llegó por sincronización desde otra
-  // computadora sin necesidad de reiniciar la app (cada 60s y al volver a la ventana).
+  // computadora sin necesidad de reiniciar la app. Además de releer la base local,
+  // dispara una sincronización con la nube (throttle 15s) para bajar lo último al
+  // instante al volver a la ventana → la otra PC deja de quedar atrasada.
+  const lastCloudSync = useRef(0);
   useEffect(() => {
     if (!isAuthenticated) return;
     const refresh = () => {
       // No refrescar si la pestaña no está visible o si hay un modal abierto
       // (el Modal pone overflow:hidden en el body), para no mover nada mientras cargás algo.
-      if (document.visibilityState === 'visible' && document.body.style.overflow !== 'hidden') loadAll(true);
+      if (!(document.visibilityState === 'visible' && document.body.style.overflow !== 'hidden')) return;
+      const now = Date.now();
+      if (now - lastCloudSync.current > 15_000) {
+        lastCloudSync.current = now;
+        // Pide al server local que sincronice con la nube y, cuando termina, relee.
+        fetch('/api/sync/now', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${localStorage.getItem('maja-auth-token')}` },
+        }).then(() => loadAll(true)).catch(() => {});
+      }
+      loadAll(true);
     };
     const interval = setInterval(refresh, 60_000);
     window.addEventListener('focus', refresh);

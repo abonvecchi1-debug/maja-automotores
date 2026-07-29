@@ -205,12 +205,19 @@ export function Finance() {
     .filter((v) => v.acquiredAs !== 'parte_pago' && !(v.status === 'señado' && v.senaType === 'compra'))
     .reduce((a, v) => a + (v.purchasePrice ?? 0), 0);
   const chequesCobrados = cheques.filter((c) => c.moneda === 'ARS' && c.estado === 'cobrado').reduce((a, c) => a + c.monto, 0);
+  // Cheques que RECIBIMOS (de una venta u otro) y después endosamos/entregamos para pagar algo
+  // (una compra de auto o un gasto). Ese egreso ya se descontó del disponible arriba, pero NO
+  // salió plata nuestra: lo pagó el cheque. Si no los sumáramos de vuelta, el disponible restaría
+  // esa compra dos veces (una como cheque que nunca cobramos, otra como precio de compra).
+  const chequesEndosados = cheques
+    .filter((c) => c.moneda === 'ARS' && c.estado === 'entregado' && c.recibidoDe)
+    .reduce((a, c) => a + c.monto, 0);
   const manualPaidExpense = transactions.filter((t) => t.type === 'egreso' && t.paid !== false).reduce((a, t) => a + t.amount, 0);
   const gastosVarPaid = expenses.filter((e) => e.paid).reduce((a, e) => a + e.amount, 0);
   const gastosFijosPaid = fixedExpenseRecords.filter((r) => r.paid).reduce((a, r) => a + r.amount, 0);
   const impuestosPaid = taxPayments.filter((t) => t.paid).reduce((a, t) => a + t.amount, 0);
 
-  const disponible = saleLiquid + collectedInstallments + manualIncome + senaVentaActiva + chequesCobrados
+  const disponible = saleLiquid + collectedInstallments + manualIncome + senaVentaActiva + chequesCobrados + chequesEndosados
     - manualPaidExpense - gastosVarPaid - gastosFijosPaid - impuestosPaid - senaCompra - comprasVehiculos;
 
   const chequesEnCarteraEstados = ['en_cartera', 'depositado'];
@@ -260,7 +267,7 @@ export function Finance() {
             <div className="min-w-0">
               <p className="text-xs text-slate-500 font-medium">Disponible (efectivo + banco)</p>
               <p className={`text-2xl font-bold ${disponible >= 0 ? 'text-brand-700' : 'text-red-700'}`}>{formatCurrency(disponible)}</p>
-              <p className="text-[11px] text-slate-400">Plata líquida: ingresos cobrados menos egresos pagados y compras de vehículos (precio de compra). Los autos recibidos en parte de pago no descuentan.</p>
+              <p className="text-[11px] text-slate-400">Plata líquida: ingresos cobrados menos egresos pagados y compras de vehículos (precio de compra). Los autos recibidos en parte de pago no descuentan, y los cheques que endosaste para pagar no restan (los pagó el cheque, no tu caja).</p>
             </div>
           </div>
         </Card>

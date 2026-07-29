@@ -2,6 +2,7 @@ import express from 'express';
 import db, { SYNCABLE_TABLES } from '../db.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getStatus, triggerSync, forceFullSync } from '../sync-service.js';
+import { applyPushRecords } from '../sync-apply.js';
 
 const router = express.Router();
 
@@ -110,35 +111,13 @@ router.post('/push', syncKeyAuth, (req, res) => {
   const serverNow = new Date().toISOString();
   const results = {};
 
-  // Upsert records
+  // Upsert records — resolución de conflictos por `rev` (ver sync-apply.js).
   for (const [table, records] of Object.entries(data)) {
     if (!SYNCABLE_TABLES.includes(table) || !Array.isArray(records)) continue;
     try {
       const columns = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
-      const hasServerCol = columns.includes('server_updated_at');
-      // Columnas que trae el cliente (server_updated_at lo sella el server, no el cliente)
-      const dataCols = columns.filter(c => c !== 'server_updated_at');
-      const insertCols = hasServerCol ? [...dataCols, 'server_updated_at'] : dataCols;
-      const values = insertCols.map(c => c === 'server_updated_at' ? '@__server_now' : `@${c}`);
-      const setClauses = dataCols.filter(c => c !== 'id').map(c => `${c} = excluded.${c}`);
-      if (hasServerCol) setClauses.push('server_updated_at = @__server_now');
-      const stmt = db.prepare(`
-        INSERT INTO ${table} (${insertCols.join(', ')})
-        VALUES (${values.join(', ')})
-        ON CONFLICT(id) DO UPDATE SET ${setClauses.join(', ')}
-        WHERE excluded.updated_at > ${table}.updated_at OR ${table}.updated_at IS NULL
-      `);
-      let count = 0;
-      const run = db.transaction(() => {
-        for (const record of records) {
-          const safe = { __server_now: serverNow };
-          for (const col of dataCols) safe[col] = record[col] ?? null;
-          stmt.run(safe);
-          count++;
-        }
-      });
-      run();
-      results[table] = count;
+      const run = db.transaction(() => applyPushRecords(db, table, columns, records, serverNow));
+      results[table] = run();
     } catch (err) {
       results[table] = `error: ${err.message}`;
     }

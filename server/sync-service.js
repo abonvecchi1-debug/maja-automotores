@@ -1,7 +1,7 @@
 import db, { SYNCABLE_TABLES } from './db.js';
 
 const PING_INTERVAL_MS = 15_000;   // check connectivity every 15s
-const AUTO_SYNC_INTERVAL_MS = 5 * 60_000; // background sync every 5 min
+const AUTO_SYNC_INTERVAL_MS = 90_000; // background sync every 90s (respaldo del disparo por foco del front)
 
 let state = {
   online: false,
@@ -72,11 +72,17 @@ function upsertRecords(table, records) {
   try {
     const columns = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
     const setClauses = columns.filter(c => c !== 'id').map(c => `${c} = excluded.${c}`).join(', ');
+    // Aplicamos lo que baja del servidor si su `rev` es mayor (versión más nueva
+    // asignada por el servidor), o si empatan y su `updated_at` es más nuevo, o si
+    // el registro local no tiene marca. COALESCE(...,0) hace que degrade al LWW por
+    // updated_at cuando falta `rev` (Render viejo aún sin sellar), sin romper nada.
     const stmt = db.prepare(`
       INSERT INTO ${table} (${columns.join(', ')})
       VALUES (${columns.map(c => `@${c}`).join(', ')})
       ON CONFLICT(id) DO UPDATE SET ${setClauses}
-      WHERE excluded.updated_at > ${table}.updated_at OR ${table}.updated_at IS NULL
+      WHERE COALESCE(excluded.rev, 0) > COALESCE(${table}.rev, 0)
+         OR (COALESCE(excluded.rev, 0) = 0 AND COALESCE(${table}.rev, 0) = 0 AND excluded.updated_at > ${table}.updated_at)
+         OR ${table}.updated_at IS NULL
     `);
     const run = db.transaction(() => {
       for (const record of records) {

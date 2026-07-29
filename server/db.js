@@ -397,6 +397,18 @@ for (const t of SYNCABLE_TABLES) {
   try { db.exec(`UPDATE ${t} SET server_updated_at = updated_at WHERE server_updated_at IS NULL`); } catch {}
 }
 try { db.exec(`ALTER TABLE sync_deletions ADD COLUMN server_deleted_at TEXT`); } catch {}
+
+// ── Revisión monótona por registro (resolución de conflictos SIN reloj) ─────
+// El problema del reloj: hasta acá el conflicto se resolvía por `updated_at` (reloj
+// de pared). Una PC con el reloj atrasado nunca ganaba y sus cambios quedaban pisados
+// para siempre. `rev` lo arregla: la asigna EL SERVIDOR (Render) en cada push aceptado
+// (rev = rev_actual + 1). El cliente la guarda y la reenvía como "versión base" de su
+// edición. Gana el rev más alto; el reloj solo desempata si el rev es igual. Así un
+// dispositivo con el reloj corrido ya no puede pisar un dato más nuevo.
+// Aditivo y retrocompatible: si falta `rev` (cliente/Render viejo) se cae al LWW anterior.
+for (const t of SYNCABLE_TABLES) {
+  try { db.exec(`ALTER TABLE ${t} ADD COLUMN rev INTEGER NOT NULL DEFAULT 0`); } catch {}
+}
 try { db.exec(`UPDATE sync_deletions SET server_deleted_at = deleted_at WHERE server_deleted_at IS NULL`); } catch {}
 
 export default db;
