@@ -97,6 +97,7 @@ export function VehicleDetail() {
   });
   const [uploadingImage, setUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const sellingRef = useRef(false);  // candado anti doble-click en "Confirmar venta"
 
   if (!vehicle) {
     return (
@@ -145,6 +146,7 @@ export function VehicleDetail() {
       interestType: 'none', interestPct: 0,
     });
     setSellTradeIn(EMPTY_TRADEIN);
+    sellingRef.current = false;
     setShowSellModal(true);
   };
 
@@ -170,6 +172,7 @@ export function VehicleDetail() {
   const sellCuotaAmount = sellFinancing ? sellFinancedTotal / sellForm.cuotas : 0;
 
   const handleSell = () => {
+    if (sellingRef.current) return;  // ya se está registrando: ignora el doble-click (evita ventas duplicadas)
     if (!sellForm.soldPrice || sellForm.soldPrice <= 0) { notify('Poné el precio de venta.', 'error'); return; }
 
     // Desglose de medios de pago (la "entrega")
@@ -193,6 +196,7 @@ export function VehicleDetail() {
     if (hasBreakdown || sellFinancing) {
       // Para registrar medios de pago / cheques / cuotas hace falta saber a quién se le vendió.
       if (!sellForm.clientId) { notify('Para registrar los medios de pago o las cuotas, elegí el comprador.', 'error'); return; }
+      sellingRef.current = true;  // pasa todas las validaciones → bloquea un segundo submit
 
       const chequeDrafts: Omit<Cheque, 'id' | 'createdAt'>[] = sellForm.cheques
         .filter((c) => c.numero || c.monto)
@@ -233,6 +237,7 @@ export function VehicleDetail() {
       );
     } else {
       // Sin desglose ni cuotas: venta simple (Finanzas toma el precio como plata líquida).
+      sellingRef.current = true;
       sellVehicle(id!, {
         soldPrice: sellForm.soldPrice,
         soldDate: sellForm.soldDate,

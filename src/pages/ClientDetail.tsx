@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Car, AlertTriangle, CheckCircle, Plus, Edit2, Trash2, Cake, Link2, X } from 'lucide-react';
 import { useStore } from '../store';
@@ -45,6 +45,7 @@ export function ClientDetail() {
   const [linkVehicleId, setLinkVehicleId] = useState('');
   // Cobro de una cuota ajustada por inflación: pide el % del mes antes de marcarla paga.
   const [inflModal, setInflModal] = useState<{ paymentId: string; base: number; pct: number } | null>(null);
+  const sellingRef = useRef(false);  // candado anti doble-click en "Registrar venta"
   const [saleForm, setSaleForm] = useState({
     vehicleId: '', saleDate: new Date().toISOString().split('T')[0],
     salePrice: 0, paymentType: 'contado' as 'contado' | 'financiado',
@@ -135,8 +136,10 @@ export function ClientDetail() {
   };
 
   const handleAddSale = () => {
+    if (sellingRef.current) return;  // ya se está registrando: ignora el doble-click (evita ventas duplicadas)
     if (!saleForm.vehicleId) { notify('Elegí el vehículo que vendés.', 'error'); return; }
     if (!saleForm.salePrice || saleForm.salePrice <= 0) { notify('Poné el precio de venta.', 'error'); return; }
+    sellingRef.current = true;
     // La "entrega" del financiado = lo asignado en medios de pago (efectivo, transfer,
     // cheque, parte de pago, seña). El resto se divide en N cuotas iguales sin interés.
     const entregaFinanciado = saleForm.payEfectivo + saleForm.payTransferencia + saleForm.payPrendario +
@@ -271,7 +274,7 @@ export function ClientDetail() {
               <Link2 size={14} /> Vincular vehículo
             </Button>
           )}
-          <Button onClick={() => setShowSaleModal(true)}>
+          <Button onClick={() => { sellingRef.current = false; setShowSaleModal(true); }}>
             <Plus size={16} /> Registrar venta
           </Button>
         </div>

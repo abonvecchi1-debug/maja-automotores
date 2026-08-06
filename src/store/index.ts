@@ -273,6 +273,9 @@ export const useStore = create<AppStore>((set, get) => ({
             sales: st.sales.map((x) => x.id === saleId ? sale : x),
             installmentPayments: [...st.installmentPayments.filter((x) => !newPayments.find((p) => p.id === x.id)), ...pms],
             cheques: [...st.cheques.filter((x) => !newCheques.find((c) => c.id === x.id)), ...(chs ?? [])],
+            // Apuntar el vehículo al id REAL de la venta que asignó el servidor (antes quedaba
+            // con el id optimista del cliente → referencia colgada y enredo de cuotas al revertir).
+            vehicles: st.vehicles.map((v) => v.id === s.vehicleId ? { ...v, saleId: sale.id } : v),
           }));
           // Si se creó un auto en parte de pago, refrescar para traerlo al stock
           if (tradeInVehicleId) get().loadAll(true);
