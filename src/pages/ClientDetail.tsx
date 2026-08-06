@@ -43,10 +43,13 @@ export function ClientDetail() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLinkVehicleModal, setShowLinkVehicleModal] = useState(false);
   const [linkVehicleId, setLinkVehicleId] = useState('');
+  // Cobro de una cuota ajustada por inflación: pide el % del mes antes de marcarla paga.
+  const [inflModal, setInflModal] = useState<{ paymentId: string; base: number; pct: number } | null>(null);
   const [saleForm, setSaleForm] = useState({
     vehicleId: '', saleDate: new Date().toISOString().split('T')[0],
     salePrice: 0, paymentType: 'contado' as 'contado' | 'financiado',
     downPayment: 0, installments: 12, notes: '',
+    interestType: 'none' as 'none' | 'fixed' | 'inflation', interestPct: 0,
     invoiceNumber: '', tradeInVehicleId: '', tradeInValue: 0,
     payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '',
     senaAplicada: 0, cheques: [] as ChequeDraft[],
@@ -55,7 +58,8 @@ export function ClientDetail() {
   const resetSaleForm = () => {
     setSaleForm({
       vehicleId: '', saleDate: new Date().toISOString().split('T')[0], salePrice: 0, paymentType: 'contado',
-      downPayment: 0, installments: 12, notes: '', invoiceNumber: '', tradeInVehicleId: '', tradeInValue: 0,
+      downPayment: 0, installments: 12, notes: '', interestType: 'none', interestPct: 0,
+      invoiceNumber: '', tradeInVehicleId: '', tradeInValue: 0,
       payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '', senaAplicada: 0, cheques: [],
     });
     setTradeIn(EMPTY_TRADEIN);
@@ -137,8 +141,13 @@ export function ClientDetail() {
     // cheque, parte de pago, seña). El resto se divide en N cuotas iguales sin interés.
     const entregaFinanciado = saleForm.payEfectivo + saleForm.payTransferencia + saleForm.payPrendario +
       saleForm.cheques.reduce((a, c) => a + (c.monto || 0), 0) + tradeIn.value + saleForm.senaAplicada;
+    // Interés: 'fixed' aplica el recargo una vez sobre lo financiado; 'inflation' guarda la
+    // cuota base (se ajusta al cobrar); 'none' sin interés.
+    const financiadoConInteres = saleForm.interestType === 'fixed'
+      ? (saleForm.salePrice - entregaFinanciado) * (1 + (saleForm.interestPct || 0) / 100)
+      : (saleForm.salePrice - entregaFinanciado);
     const installmentAmount = saleForm.paymentType === 'financiado' && saleForm.installments > 0
-      ? (saleForm.salePrice - entregaFinanciado) / saleForm.installments : 0;
+      ? financiadoConInteres / saleForm.installments : 0;
     const payments = saleForm.paymentType === 'financiado'
       ? Array.from({ length: saleForm.installments }, (_, i) => {
           const due = new Date(saleForm.saleDate);
@@ -181,6 +190,8 @@ export function ClientDetail() {
         downPayment: saleForm.paymentType === 'financiado' ? entregaFinanciado : 0,
         installments: saleForm.installments,
         installmentAmount, notes: saleForm.notes,
+        interestType: saleForm.paymentType === 'financiado' ? saleForm.interestType : 'none',
+        interestRate: saleForm.paymentType === 'financiado' && saleForm.interestType === 'fixed' ? saleForm.interestPct : 0,
         invoiceNumber: saleForm.invoiceNumber || undefined,
         tradeInValue: tradeIn.value || undefined,
         paymentMethods: paymentMethods.length ? paymentMethods : undefined,
@@ -332,11 +343,20 @@ export function ClientDetail() {
                             {p.paid && p.paidDate ? ` · Pagado ${formatDate(p.paidDate)}` : ''}
                           </p>
                         </div>
-                        <span className="text-sm font-semibold text-slate-900">{formatCurrency(p.amount)}</span>
+                        <span className="text-sm font-semibold text-slate-900 text-right">
+                          {p.paid && p.paidAmount != null ? formatCurrency(p.paidAmount) : formatCurrency(p.amount)}
+                          {p.paid && p.inflationRate != null && (
+                            <span className="block text-[10px] text-slate-400 font-normal">base {formatCurrency(p.amount)} +{p.inflationRate}% infl.</span>
+                          )}
+                        </span>
                         {p.paid ? (
                           <CheckCircle size={18} className="text-green-500" />
                         ) : (
-                          <Button size="sm" variant={isOverdue ? 'danger' : 'secondary'} onClick={() => markInstallmentPaid(p.id)}>
+                          <Button size="sm" variant={isOverdue ? 'danger' : 'secondary'} onClick={() => {
+                            const sale = sales.find((sx) => sx.id === p.saleId);
+                            if (sale?.interestType === 'inflation') setInflModal({ paymentId: p.id, base: p.amount, pct: 0 });
+                            else markInstallmentPaid(p.id);
+                          }}>
                             Cobrar
                           </Button>
                         )}
@@ -470,23 +490,55 @@ export function ClientDetail() {
             label="Forma de pago"
             value={saleForm.paymentType}
             onChange={(e) => setSaleForm((f) => ({ ...f, paymentType: e.target.value as 'contado' | 'financiado' }))}
-            options={[{ value: 'contado', label: 'Contado' }, { value: 'financiado', label: 'Financiado (cuotas propias, sin interés)' }]}
+            options={[{ value: 'contado', label: 'Contado' }, { value: 'financiado', label: 'Financiado (cuotas propias)' }]}
           />
-          {saleForm.paymentType === 'financiado' && (
+          {saleForm.paymentType === 'financiado' && (() => {
+            const finBase = Math.max(0, saleForm.salePrice - assignedTotal);
+            const finTotal = saleForm.interestType === 'fixed' ? finBase * (1 + (saleForm.interestPct || 0) / 100) : finBase;
+            const cuota = saleForm.installments > 0 ? finTotal / saleForm.installments : 0;
+            return (
             <div className="p-4 bg-slate-50 rounded-xl space-y-3">
               <Input
                 label="Cantidad de cuotas" type="number" value={saleForm.installments}
                 onChange={(e) => setSaleForm((f) => ({ ...f, installments: +e.target.value }))}
               />
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Interés de las cuotas</label>
+                <div className="flex gap-2">
+                  {([['none', 'Sin interés'], ['fixed', 'Interés fijo'], ['inflation', 'Por inflación']] as const).map(([val, lbl]) => (
+                    <button
+                      key={val} type="button"
+                      onClick={() => setSaleForm((f) => ({ ...f, interestType: val }))}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium border-2 transition-colors ${
+                        saleForm.interestType === val ? 'bg-brand-50 border-brand-400 text-brand-700' : 'bg-white border-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {saleForm.interestType === 'fixed' && (
+                <Input
+                  label="Interés (%) — recargo total sobre lo financiado" type="number" value={saleForm.interestPct}
+                  onChange={(e) => setSaleForm((f) => ({ ...f, interestPct: +e.target.value }))}
+                />
+              )}
+              {saleForm.interestType === 'inflation' && (
+                <p className="text-[11px] text-brand-700 bg-brand-50 rounded-lg px-3 py-2">
+                  Cada cuota se ajusta por la inflación del mes en que la cobrás. La cuota de abajo es la base; al cobrarla te va a pedir el % de inflación del mes.
+                </p>
+              )}
               {saleForm.salePrice > 0 && saleForm.installments > 0 && (
                 <div className="text-sm text-slate-700 bg-white rounded-lg p-3 border border-slate-200">
                   Entrega: <span className="font-semibold">{formatCurrency(assignedTotal)}</span>
-                  {' · '}Resto a financiar: <span className="font-semibold">{formatCurrency(Math.max(0, saleForm.salePrice - assignedTotal))}</span>
+                  {' · '}Resto a financiar: <span className="font-semibold">{formatCurrency(finBase)}</span>
+                  {saleForm.interestType === 'fixed' && (saleForm.interestPct || 0) > 0 && (
+                    <> {' · '}Con {saleForm.interestPct}%: <span className="font-semibold">{formatCurrency(finTotal)}</span></>
+                  )}
                   <div className="mt-1">
-                    {saleForm.installments} cuota{saleForm.installments !== 1 ? 's' : ''} de{' '}
-                    <span className="font-bold text-brand-600">
-                      {formatCurrency(Math.max(0, saleForm.salePrice - assignedTotal) / saleForm.installments)}
-                    </span> por mes (sin interés)
+                    {saleForm.installments} cuota{saleForm.installments !== 1 ? 's' : ''} {saleForm.interestType === 'inflation' ? 'base ' : ''}de{' '}
+                    <span className="font-bold text-brand-600">{formatCurrency(cuota)}</span> por mes
                   </div>
                 </div>
               )}
@@ -494,7 +546,8 @@ export function ClientDetail() {
                 La entrega se carga abajo en "Medios de pago" (efectivo, transferencia, cheque o auto en parte de pago).
               </p>
             </div>
-          )}
+            );
+          })()}
           {/* Parte de pago */}
           <TradeInSection value={tradeIn} onChange={setTradeIn} vehicles={vehicles} />
 
@@ -735,6 +788,36 @@ export function ClientDetail() {
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* Cobro de cuota con ajuste por inflación */}
+      <Modal
+        isOpen={!!inflModal}
+        onClose={() => setInflModal(null)}
+        title="Cobrar cuota (ajuste por inflación)"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setInflModal(null)}>Cancelar</Button>
+            <Button onClick={() => {
+              if (inflModal) markInstallmentPaid(inflModal.paymentId, inflModal.pct || 0);
+              setInflModal(null);
+            }}>Cobrar cuota</Button>
+          </>
+        }
+      >
+        {inflModal && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">Cuota base: <span className="font-semibold text-slate-900">{formatCurrency(inflModal.base)}</span></p>
+            <Input
+              label="Inflación del mes (%)" type="number" value={inflModal.pct}
+              onChange={(e) => setInflModal((m) => m ? { ...m, pct: +e.target.value } : m)}
+              placeholder="Ej: 6.2"
+            />
+            <div className="text-sm bg-brand-50 border border-brand-200 rounded-lg px-3 py-2 text-slate-700">
+              Se cobra: <span className="font-bold text-brand-700">{formatCurrency(inflModal.base * (1 + (inflModal.pct || 0) / 100))}</span>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -19,6 +19,8 @@ const mapSale = (r) => ({
   downPayment: r.down_payment,
   installments: r.installments,
   installmentAmount: r.installment_amount,
+  interestType: r.interest_type ?? 'none',
+  interestRate: r.interest_rate ?? 0,
   invoiceNumber: r.invoice_number ?? undefined,
   tradeInVehicleId: r.trade_in_vehicle_id ?? undefined,
   tradeInValue: r.trade_in_value ?? undefined,
@@ -35,6 +37,8 @@ const mapPayment = (r) => ({
   amount: r.amount,
   paid: r.paid === 1,
   paidDate: r.paid_date ?? undefined,
+  paidAmount: r.paid_amount ?? undefined,
+  inflationRate: r.inflation_rate ?? undefined,
 });
 
 const mapChequeRow = (r) => ({
@@ -72,12 +76,13 @@ router.post('/', (req, res) => {
 
     db.prepare(`
       INSERT INTO sales (id,vehicle_id,client_id,sale_date,sale_price,payment_type,down_payment,
-        installments,installment_amount,invoice_number,trade_in_vehicle_id,trade_in_value,payment_methods,notes,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        installments,installment_amount,interest_type,interest_rate,invoice_number,trade_in_vehicle_id,trade_in_value,payment_methods,notes,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       saleId, sale.vehicleId, sale.clientId, sale.saleDate, sale.salePrice,
       sale.paymentType, sale.downPayment ?? 0, sale.installments ?? 0,
-      sale.installmentAmount ?? 0, sale.invoiceNumber ?? null,
+      sale.installmentAmount ?? 0, sale.interestType ?? 'none', sale.interestRate ?? 0,
+      sale.invoiceNumber ?? null,
       tradeInVehicleId, (tradeIn?.value ?? sale.tradeInValue) ?? null,
       JSON.stringify(sale.paymentMethods ?? []),
       sale.notes ?? '', now
@@ -129,9 +134,20 @@ router.post('/', (req, res) => {
 
 router.put('/installments/:id/pay', (req, res) => {
   const { id } = req.params;
-  if (!db.prepare('SELECT id FROM installment_payments WHERE id = ?').get(id)) return res.status(404).json({ error: 'Cuota no encontrada' });
+  const row = db.prepare('SELECT * FROM installment_payments WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'Cuota no encontrada' });
   const today = new Date().toISOString().split('T')[0];
-  db.prepare('UPDATE installment_payments SET paid=1, paid_date=? WHERE id=?').run(today, id);
+  // Si la venta ajusta por inflación y viene el % del mes, se cobra la cuota ajustada.
+  const sale = db.prepare('SELECT interest_type FROM sales WHERE id = ?').get(row.sale_id);
+  const rawInfl = req.body ? req.body.inflationRate : undefined;
+  let paidAmount = row.amount;
+  let inflationRate = null;
+  if (sale && sale.interest_type === 'inflation' && rawInfl != null && !Number.isNaN(Number(rawInfl))) {
+    inflationRate = Number(rawInfl);
+    paidAmount = row.amount * (1 + inflationRate / 100);
+  }
+  db.prepare('UPDATE installment_payments SET paid=1, paid_date=?, paid_amount=?, inflation_rate=? WHERE id=?')
+    .run(today, paidAmount, inflationRate, id);
   res.json({ payment: mapPayment(db.prepare('SELECT * FROM installment_payments WHERE id = ?').get(id)) });
 });
 

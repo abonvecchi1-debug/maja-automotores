@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { authFetch } from './authStore';
+import { notify } from '../components/ui/Feedback';
 import type {
   Vehicle, Expense, Client, Sale, InstallmentPayment,
   Supplier, FixedExpenseType, FixedExpenseRecord,
@@ -51,7 +52,7 @@ interface AppStore {
   addSale: (s: Omit<Sale, 'id' | 'createdAt'>, payments: Omit<InstallmentPayment, 'id'>[], cheques?: Omit<Cheque, 'id' | 'createdAt'>[], tradeIn?: TradeInInput) => void;
   sellVehicle: (id: string, data: { soldPrice: number; soldDate: string; clientId?: string; tradeIn?: TradeInInput }) => void;
   revertSale: (id: string) => void;
-  markInstallmentPaid: (id: string) => void;
+  markInstallmentPaid: (id: string, inflationRate?: number) => void;
 
   addSupplier: (s: Omit<Supplier, 'id' | 'createdAt'>) => void;
   updateSupplier: (id: string, data: Partial<Supplier>) => void;
@@ -254,6 +255,7 @@ export const useStore = create<AppStore>((set, get) => ({
     const newSale: Sale = { ...s, id: saleId, createdAt: now() };
     const newPayments: InstallmentPayment[] = payments.map((p) => ({ ...p, id: uid(), saleId }));
     const newCheques: Cheque[] = cheques.map((c) => ({ ...c, id: uid(), saleId, createdAt: now() }));
+    const prevVehicles = get().vehicles;  // para revertir si el guardado falla
     set((st) => ({
       sales: [...st.sales, newSale],
       installmentPayments: [...st.installmentPayments, ...newPayments],
@@ -264,7 +266,8 @@ export const useStore = create<AppStore>((set, get) => ({
     }));
     sync(
       () => authFetch('/api/sales', { method: 'POST', body: JSON.stringify({ sale: s, payments, cheques, tradeIn }) })
-        .then((r) => r.json())
+        // fetch NO rechaza en errores HTTP: si el server falló, lanzamos para que corra el revert.
+        .then(async (r) => { if (!r.ok) throw new Error(`Sale POST ${r.status}`); return r.json(); })
         .then(({ sale, payments: pms, cheques: chs, tradeInVehicleId }) => {
           set((st) => ({
             sales: st.sales.map((x) => x.id === saleId ? sale : x),
@@ -273,7 +276,18 @@ export const useStore = create<AppStore>((set, get) => ({
           }));
           // Si se creó un auto en parte de pago, refrescar para traerlo al stock
           if (tradeInVehicleId) get().loadAll(true);
-        })
+        }),
+      // Revert: deshace el optimistic update y avisa (antes fallaba en silencio y la venta
+      // quedaba "a medias" — el auto figuraba vendido pero no se guardaba la venta).
+      () => {
+        set((st) => ({
+          vehicles: prevVehicles,
+          sales: st.sales.filter((x) => x.id !== saleId),
+          installmentPayments: st.installmentPayments.filter((x) => !newPayments.find((p) => p.id === x.id)),
+          cheques: st.cheques.filter((x) => !newCheques.find((c) => c.id === x.id)),
+        }));
+        notify('No se pudo registrar la venta. No se guardó nada — revisá la conexión y probá de nuevo.', 'error');
+      }
     );
   },
   sellVehicle: (id, data) => {
@@ -308,9 +322,19 @@ export const useStore = create<AppStore>((set, get) => ({
     }));
     sync(() => authFetch(`/api/vehicles/${id}/revert-sale`, { method: 'PUT' }).then(() => {}));
   },
-  markInstallmentPaid: (id) => {
-    set((s) => ({ installmentPayments: s.installmentPayments.map((p) => p.id === id ? { ...p, paid: true, paidDate: today() } : p) }));
-    sync(() => authFetch(`/api/sales/installments/${id}/pay`, { method: 'PUT' }).then(() => {}));
+  markInstallmentPaid: (id, inflationRate) => {
+    set((s) => ({
+      installmentPayments: s.installmentPayments.map((p) => {
+        if (p.id !== id) return p;
+        // Ventas con ajuste por inflación: se cobra la cuota ajustada por el % del mes.
+        const paidAmount = inflationRate != null ? p.amount * (1 + inflationRate / 100) : p.amount;
+        return { ...p, paid: true, paidDate: today(), paidAmount, ...(inflationRate != null ? { inflationRate } : {}) };
+      }),
+    }));
+    sync(() => authFetch(`/api/sales/installments/${id}/pay`, {
+      method: 'PUT',
+      body: JSON.stringify(inflationRate != null ? { inflationRate } : {}),
+    }).then(() => {}));
   },
 
   // ── Suppliers ──────────────────────────────────────────────────────────

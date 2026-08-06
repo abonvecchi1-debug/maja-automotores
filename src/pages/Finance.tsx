@@ -189,7 +189,7 @@ export function Finance() {
       saleLiquid += Math.max(0, (v.soldPrice ?? 0) - tradeInVal);
     }
   }
-  const collectedInstallments = installmentPayments.filter((p) => p.paid).reduce((a, p) => a + p.amount, 0);
+  const collectedInstallments = installmentPayments.filter((p) => p.paid).reduce((a, p) => a + (p.paidAmount ?? p.amount), 0);
   const manualIncome = transactions.filter((t) => t.type === 'ingreso').reduce((a, t) => a + t.amount, 0);
   // Señas ahora viven en el vehículo: venta activa (señado) suma; compra (mientras está señado) resta.
   const senaVentaActiva = vehicles

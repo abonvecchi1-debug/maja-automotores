@@ -81,6 +81,7 @@ export function VehicleDetail() {
     payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '',
     senaAplicada: 0, cheques: [] as ChequeDraft[],
     financiaPropia: false, cuotas: 12,
+    interestType: 'none' as 'none' | 'fixed' | 'inflation', interestPct: 0,
   });
   const [sellTradeIn, setSellTradeIn] = useState<TradeInState>(EMPTY_TRADEIN);
   const [senaForm, setSenaForm] = useState({
@@ -141,6 +142,7 @@ export function VehicleDetail() {
       payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '',
       senaAplicada: senaActivaVenta, cheques: [],
       financiaPropia: false, cuotas: 12,
+      interestType: 'none', interestPct: 0,
     });
     setSellTradeIn(EMPTY_TRADEIN);
     setShowSellModal(true);
@@ -158,10 +160,14 @@ export function VehicleDetail() {
     sellForm.payEfectivo + sellForm.payTransferencia + sellForm.payPrendario +
     sellChequesTotal + sellTradeIn.value + sellForm.senaAplicada;
   const sellAssignedRemainder = sellForm.soldPrice - sellAssignedTotal;
-  // Financiación propia (cuotas nuestras, sin interés): la entrega es lo asignado arriba,
-  // y el resto se divide en N cuotas iguales mensuales.
+  // Financiación propia (cuotas nuestras): la entrega es lo asignado arriba y el resto se
+  // divide en N cuotas mensuales. El interés puede ser: sin interés, recargo fijo (una vez
+  // sobre lo financiado) o ajuste por inflación (se aplica al cobrar cada cuota).
   const sellFinancing = sellForm.financiaPropia && sellForm.cuotas > 0 && sellAssignedRemainder > 0;
-  const sellCuotaAmount = sellFinancing ? sellAssignedRemainder / sellForm.cuotas : 0;
+  const sellFinancedTotal = sellForm.interestType === 'fixed'
+    ? sellAssignedRemainder * (1 + (sellForm.interestPct || 0) / 100)
+    : sellAssignedRemainder;
+  const sellCuotaAmount = sellFinancing ? sellFinancedTotal / sellForm.cuotas : 0;
 
   const handleSell = () => {
     if (!sellForm.soldPrice || sellForm.soldPrice <= 0) { notify('Poné el precio de venta.', 'error'); return; }
@@ -215,6 +221,8 @@ export function VehicleDetail() {
           downPayment: sellFinancing ? sellAssignedTotal : 0,
           installments: sellFinancing ? sellForm.cuotas : 0,
           installmentAmount: sellCuotaAmount,
+          interestType: sellFinancing ? sellForm.interestType : 'none',
+          interestRate: sellFinancing && sellForm.interestType === 'fixed' ? sellForm.interestPct : 0,
           notes: '',
           tradeInValue: sellTradeIn.value || undefined,
           paymentMethods: paymentMethods.length ? paymentMethods : undefined,
@@ -1012,7 +1020,7 @@ export function VehicleDetail() {
                   onChange={(e) => setSellForm((f) => ({ ...f, financiaPropia: e.target.checked }))}
                   className="w-4 h-4 accent-indigo-600"
                 />
-                <span className="text-sm font-semibold text-slate-700">Lo financiás vos: el resto en cuotas (sin interés)</span>
+                <span className="text-sm font-semibold text-slate-700">Lo financiás vos: el resto en cuotas</span>
               </label>
               {sellForm.financiaPropia && (
                 <>
@@ -1020,12 +1028,42 @@ export function VehicleDetail() {
                     label="Cantidad de cuotas" type="number" value={sellForm.cuotas}
                     onChange={(e) => setSellForm((f) => ({ ...f, cuotas: +e.target.value }))}
                   />
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Interés de las cuotas</label>
+                    <div className="flex gap-2">
+                      {([['none', 'Sin interés'], ['fixed', 'Interés fijo'], ['inflation', 'Por inflación']] as const).map(([val, lbl]) => (
+                        <button
+                          key={val} type="button"
+                          onClick={() => setSellForm((f) => ({ ...f, interestType: val }))}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium border-2 transition-colors ${
+                            sellForm.interestType === val ? 'bg-indigo-100 border-indigo-400 text-indigo-700' : 'bg-white border-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {sellForm.interestType === 'fixed' && (
+                    <Input
+                      label="Interés (%) — recargo total sobre lo financiado" type="number" value={sellForm.interestPct}
+                      onChange={(e) => setSellForm((f) => ({ ...f, interestPct: +e.target.value }))}
+                    />
+                  )}
+                  {sellForm.interestType === 'inflation' && (
+                    <p className="text-[11px] text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2">
+                      Cada cuota se ajusta por la inflación del mes en que la cobrás. La cuota de abajo es la base (sin ajuste); al marcarla como pagada te va a pedir el % de inflación del mes.
+                    </p>
+                  )}
                   {sellFinancing && (
                     <div className="text-sm bg-white border border-indigo-200 rounded-lg px-3 py-2 text-slate-700">
                       Entrega ahora: <span className="font-semibold">{formatCurrency(sellAssignedTotal)}</span>
                       {' · '}Resto a financiar: <span className="font-semibold">{formatCurrency(sellAssignedRemainder)}</span>
+                      {sellForm.interestType === 'fixed' && (sellForm.interestPct || 0) > 0 && (
+                        <> {' · '}Con {sellForm.interestPct}% : <span className="font-semibold">{formatCurrency(sellFinancedTotal)}</span></>
+                      )}
                       <div className="mt-1">
-                        {sellForm.cuotas} cuota{sellForm.cuotas !== 1 ? 's' : ''} de{' '}
+                        {sellForm.cuotas} cuota{sellForm.cuotas !== 1 ? 's' : ''} {sellForm.interestType === 'inflation' ? 'base ' : ''}de{' '}
                         <span className="font-bold text-indigo-700">{formatCurrency(sellCuotaAmount)}</span> por mes
                       </div>
                     </div>

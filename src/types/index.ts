@@ -140,6 +140,12 @@ export interface Sale {
   downPayment: number;      // 0 si es contado
   installments: number;     // 0 si es contado
   installmentAmount: number;
+  // Interés de las cuotas propias:
+  //  - 'none': sin interés (cuota = financiado / N)
+  //  - 'fixed': recargo total una vez (cuota = financiado × (1 + interestRate/100) / N)
+  //  - 'inflation': se ajusta por la inflación del mes al cobrar cada cuota
+  interestType?: 'none' | 'fixed' | 'inflation';
+  interestRate?: number;    // % del recargo fijo (solo si interestType === 'fixed')
   invoiceNumber?: string;   // número de factura AFIP
   tradeInVehicleId?: string; // auto entregado en parte de pago
   tradeInValue?: number;    // valor asignado al auto de parte de pago
@@ -153,9 +159,13 @@ export interface InstallmentPayment {
   saleId: string;
   installmentNumber: number;
   dueDate: string;
-  amount: number;
+  amount: number;           // monto base de la cuota (sin ajuste por inflación)
   paidDate?: string;
   paid: boolean;
+  // Solo para ventas con interés por inflación: al cobrar se ajusta el monto con la
+  // inflación del mes. paidAmount = lo realmente cobrado; inflationRate = el % aplicado.
+  paidAmount?: number;
+  inflationRate?: number;
 }
 
 // ─── Suppliers ────────────────────────────────────────────────────────────

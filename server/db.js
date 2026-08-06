@@ -308,6 +308,12 @@ try { db.exec(`ALTER TABLE transactions ADD COLUMN paid INTEGER NOT NULL DEFAULT
 try { db.exec(`ALTER TABLE transactions ADD COLUMN paid_date TEXT`); } catch {}
 // Desglose de medios de pago de una venta (JSON: [{method, amount, reference}])
 try { db.exec(`ALTER TABLE sales ADD COLUMN payment_methods TEXT NOT NULL DEFAULT '[]'`); } catch {}
+// Interés de las cuotas propias: 'none' | 'fixed' (recargo total, interest_rate %) | 'inflation'
+try { db.exec(`ALTER TABLE sales ADD COLUMN interest_type TEXT NOT NULL DEFAULT 'none'`); } catch {}
+try { db.exec(`ALTER TABLE sales ADD COLUMN interest_rate REAL NOT NULL DEFAULT 0`); } catch {}
+// Cuotas ajustadas por inflación al cobrar: paid_amount = lo cobrado, inflation_rate = % aplicado
+try { db.exec(`ALTER TABLE installment_payments ADD COLUMN paid_amount REAL`); } catch {}
+try { db.exec(`ALTER TABLE installment_payments ADD COLUMN inflation_rate REAL`); } catch {}
 // Vínculo de un cheque con la venta que lo originó
 try { db.exec(`ALTER TABLE cheques ADD COLUMN sale_id TEXT`); } catch {}
 // Seña sobre el vehículo (reserva con depósito): venta = me lo señaron, compra = yo lo señé
