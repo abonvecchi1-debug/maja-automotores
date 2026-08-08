@@ -118,6 +118,9 @@ function sync(call: () => Promise<void>, revert?: () => void) {
   });
 }
 
+// Anti-spam de la auto-reparación de vehículos vendidos (vehicleId → último intento ms).
+const reconcileAttempts = new Map<string, number>();
+
 // ─── Store ────────────────────────────────────────────────────────────────
 
 export const useStore = create<AppStore>((set, get) => ({
@@ -160,6 +163,33 @@ export const useStore = create<AppStore>((set, get) => ({
         initialized: true,
         loading: false,
       });
+
+      // Auto-reparación: si un auto tiene una venta registrada pero NO quedó marcado como
+      // "vendido", lo marcamos vendido a partir de su venta. Pasa cuando el cambio de estado
+      // del auto pierde un conflicto de sincronización (versión "publicado" de otra PC le gana)
+      // mientras la venta —que es una fila nueva— sí entra. Resultado: "se registró todo menos
+      // que el auto quede vendido". Esto lo corrige solo y previene que se note.
+      const vs: Vehicle[] = data.vehicles ?? [];
+      const ss: Sale[] = data.sales ?? [];
+      const saleByVehicle = new Map<string, Sale>();
+      for (const s of ss) if (s.vehicleId && !saleByVehicle.has(s.vehicleId)) saleByVehicle.set(s.vehicleId, s);
+      const nowMs = Date.now();
+      for (const v of vs) {
+        if (v.status === 'vendido') continue;
+        const sale = saleByVehicle.get(v.id);
+        if (!sale) continue;
+        // No reintentar el mismo auto más de una vez cada 30s (evita spam si el sync tarda).
+        if (nowMs - (reconcileAttempts.get(v.id) ?? 0) < 30_000) continue;
+        reconcileAttempts.set(v.id, nowMs);
+        get().updateVehicle(v.id, {
+          status: 'vendido',
+          soldPrice: sale.salePrice,
+          soldDate: sale.saleDate,
+          soldToClientId: sale.clientId,
+          saleId: sale.id,
+          ...(sale.tradeInVehicleId ? { tradeInVehicleId: sale.tradeInVehicleId } : {}),
+        });
+      }
     } catch (err) {
       console.error('[loadAll error]', err);
       set({ loading: false, initialized: true });
