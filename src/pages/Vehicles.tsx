@@ -113,6 +113,11 @@ export function Vehicles() {
     return matchSearch && matchStatus && matchBrand && matchKmMin && matchKmMax;
   });
 
+  // Cuando se ven los VENDIDOS, se ordenan por fecha de venta (la más reciente arriba).
+  const visible = statusFilter === 'vendido'
+    ? [...filtered].sort((a, b) => (b.soldDate ?? '').localeCompare(a.soldDate ?? ''))
+    : filtered;
+
   const vehicleCost = (id: string) =>
     expenses.filter((e) => e.vehicleId === id).reduce((a, e) => a + e.amount, 0);
 
@@ -289,7 +294,7 @@ export function Vehicles() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map((v) => {
+              {visible.map((v) => {
                 const cost = vehicleCost(v.id);
                 const margin = v.status === 'vendido' && v.soldPrice
                   ? v.soldPrice - v.purchasePrice - cost
@@ -337,6 +342,9 @@ export function Vehicles() {
                       <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColor[v.status]}`}>
                         {statusLabel[v.status]}
                       </span>
+                      {v.status === 'vendido' && v.soldDate && (
+                        <div className="text-[11px] text-slate-400 mt-1">{formatDate(v.soldDate)}</div>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-right hidden sm:table-cell">
                       <div className="flex items-center justify-end gap-2">
