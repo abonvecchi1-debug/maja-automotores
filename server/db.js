@@ -257,6 +257,17 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS usd_operations (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL DEFAULT 'compra',   -- 'compra' | 'venta'
+    amount_usd REAL NOT NULL DEFAULT 0,    -- dólares de la operación
+    rate REAL NOT NULL DEFAULT 0,          -- cotización (pesos por dólar)
+    amount_pesos REAL NOT NULL DEFAULT 0,  -- amount_usd * rate
+    date TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS credit_campaigns (
     id TEXT PRIMARY KEY,
     titulo TEXT NOT NULL DEFAULT '',
@@ -350,7 +361,7 @@ export const SYNCABLE_TABLES = [
   'suppliers', 'expenses', 'tasks', 'transactions',
   'transfers', 'leads', 'contact_history', 'daily_cashes', 'cash_movements',
   'fixed_expense_types', 'fixed_expense_records', 'tax_payments',
-  'credit_campaigns', 'cheques', 'senas',
+  'credit_campaigns', 'cheques', 'senas', 'usd_operations',
 ];
 
 // Add updated_at column and auto-update triggers to every sync table

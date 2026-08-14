@@ -6,7 +6,7 @@ import type {
   Supplier, FixedExpenseType, FixedExpenseRecord,
   Task, Transaction, AppSettings,
   Transfer08, Lead, DailyCash, CashMovement, TaxPayment,
-  Cheque, Sena, TradeInInput,
+  Cheque, Sena, TradeInInput, UsdOperation,
 } from '../types';
 
 // ─── Store Interface ───────────────────────────────────────────────────────
@@ -30,6 +30,7 @@ interface AppStore {
   taxPayments: TaxPayment[];
   cheques: Cheque[];
   senas: Sena[];
+  usdOperations: UsdOperation[];
 
   initialized: boolean;
   loading: boolean;
@@ -99,6 +100,9 @@ interface AppStore {
   updateCheque: (id: string, data: Partial<Cheque>) => void;
   deleteCheque: (id: string) => void;
 
+  addUsdOperation: (o: Omit<UsdOperation, 'id' | 'createdAt'>) => void;
+  deleteUsdOperation: (id: string) => void;
+
   addSena: (s: Omit<Sena, 'id' | 'createdAt'>) => void;
   updateSena: (id: string, data: Partial<Sena>) => void;
   deleteSena: (id: string) => void;
@@ -127,7 +131,7 @@ export const useStore = create<AppStore>((set, get) => ({
   vehicles: [], expenses: [], clients: [], sales: [], installmentPayments: [],
   suppliers: [], fixedExpenseTypes: [], fixedExpenseRecords: [], tasks: [],
   transactions: [], transfers: [], leads: [], dailyCashes: [], cashMovements: [],
-  taxPayments: [], cheques: [], senas: [],
+  taxPayments: [], cheques: [], senas: [], usdOperations: [],
   settings: { iibbRate: 3, province: 'Buenos Aires', businessName: 'Maja Automotores', cuit: '', currency: 'ARS' },
   initialized: false,
   loading: false,
@@ -159,6 +163,7 @@ export const useStore = create<AppStore>((set, get) => ({
         taxPayments: data.taxPayments ?? [],
         cheques: data.cheques ?? [],
         senas: data.senas ?? [],
+        usdOperations: data.usdOperations ?? [],
         settings: data.settings ?? get().settings,
         initialized: true,
         loading: false,
@@ -651,6 +656,25 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   // ── Señas ──────────────────────────────────────────────────────────────
+  addUsdOperation: (o) => {
+    const tempId = uid();
+    set((st) => ({ usdOperations: [...st.usdOperations, { ...o, id: tempId, createdAt: now() }] }));
+    sync(
+      () => authFetch('/api/usd', { method: 'POST', body: JSON.stringify(o) })
+        .then((r) => r.json())
+        .then(({ usdOperation }) => set((st) => ({ usdOperations: st.usdOperations.map((x) => x.id === tempId ? usdOperation : x) }))),
+      () => set((st) => ({ usdOperations: st.usdOperations.filter((x) => x.id !== tempId) }))
+    );
+  },
+  deleteUsdOperation: (id) => {
+    const prev = get().usdOperations;
+    set((st) => ({ usdOperations: st.usdOperations.filter((o) => o.id !== id) }));
+    sync(
+      () => authFetch(`/api/usd/${id}`, { method: 'DELETE' }).then(() => {}),
+      () => set({ usdOperations: prev })
+    );
+  },
+
   addSena: (s) => {
     const tempId = uid();
     set((st) => ({ senas: [...st.senas, { ...s, id: tempId, createdAt: now() }] }));

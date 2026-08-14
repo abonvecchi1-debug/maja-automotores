@@ -23,6 +23,7 @@ import { Leads } from './pages/Leads';
 import { Credits } from './pages/Credits';
 import { Reports } from './pages/Reports';
 import { Cheques } from './pages/Cheques';
+import { Dollars } from './pages/Dollars';
 import { SyncSettings } from './pages/SyncSettings';
 
 /** Runs checkAuth on mount and loads all app data once authenticated. */
@@ -154,6 +155,7 @@ export default function App() {
             <Route path="tareas" element={<Tasks />} />
             <Route path="creditos" element={<Credits />} />
             <Route path="cheques" element={<Cheques />} />
+            <Route path="dolares" element={<ProtectedRoute allowedRoles={['admin']}><Dollars /></ProtectedRoute>} />
             <Route path="reportes" element={<ProtectedRoute allowedRoles={['admin']}><Reports /></ProtectedRoute>} />
             <Route path="sincronizacion" element={<ProtectedRoute allowedRoles={['admin']}><SyncSettings /></ProtectedRoute>} />
           </Route>

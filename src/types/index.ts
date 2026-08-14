@@ -386,3 +386,19 @@ export interface Sena {
   notes: string;
   createdAt: string;
 }
+
+// ─── Dólares (compra/venta de divisas) ────────────────────────────────────
+// Compra = cambio de divisa (pesos → dólares, sin ganancia). Venta = se realiza
+// la ganancia contra el precio PROMEDIO de compra. Ver cálculo en pages/Dollars.tsx.
+export type UsdOperationType = 'compra' | 'venta';
+
+export interface UsdOperation {
+  id: string;
+  type: UsdOperationType;
+  amountUsd: number;   // dólares de la operación
+  rate: number;        // cotización (pesos por dólar)
+  amountPesos: number; // amountUsd * rate
+  date: string;
+  notes: string;
+  createdAt: string;
+}

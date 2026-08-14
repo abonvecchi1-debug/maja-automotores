@@ -113,6 +113,10 @@ const mapSena = (r) => ({
   counterpartyName: r.counterparty_name ?? '', amount: r.amount, method: r.method,
   date: r.date, status: r.status, notes: r.notes, createdAt: r.created_at,
 });
+const mapUsd = (r) => ({
+  id: r.id, type: r.type, amountUsd: r.amount_usd, rate: r.rate,
+  amountPesos: r.amount_pesos, date: r.date, notes: r.notes ?? '', createdAt: r.created_at,
+});
 
 const SETTING_DEFAULTS = { iibbRate: 3, province: 'Buenos Aires', businessName: 'Maja Automotores', cuit: '', currency: 'ARS' };
 const getSettings = () => {
@@ -149,6 +153,7 @@ router.get('/', (req, res) => {
     taxPayments:          db.prepare('SELECT * FROM tax_payments ORDER BY month DESC, due_date ASC').all().map(mapTax),
     cheques:              db.prepare('SELECT * FROM cheques ORDER BY fecha_vencimiento ASC').all().map(mapCheque),
     senas:                db.prepare('SELECT * FROM senas ORDER BY created_at DESC').all().map(mapSena),
+    usdOperations:        db.prepare('SELECT * FROM usd_operations ORDER BY date ASC, created_at ASC').all().map(mapUsd),
     settings:             getSettings(),
   });
 });
