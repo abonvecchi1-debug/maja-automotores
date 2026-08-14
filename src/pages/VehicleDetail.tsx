@@ -351,7 +351,15 @@ export function VehicleDetail() {
   };
 
   const handleEditSave = () => {
-    updateVehicle(id!, editForm);
+    // Editar los datos de un auto VENDIDO o SEÑADO (p.ej. corregir el precio de compra
+    // porque se le sumó un gasto) NO debe cambiarle el estado. El form arriba pone
+    // 'publicado' como estado por defecto para un vendido, así que si guardáramos tal cual
+    // lo "des-venderíamos" (se volvía para atrás la venta). Preservamos el estado real;
+    // vender/revertir se maneja por su propio flujo, no por este formulario.
+    const patch = (vehicle.status === 'vendido' || vehicle.status === 'señado')
+      ? { ...editForm, status: vehicle.status }
+      : editForm;
+    updateVehicle(id!, patch);
     setShowEditModal(false);
   };
 
