@@ -22,7 +22,9 @@ export function Dashboard() {
   const vehiclesPub      = vehicles.filter((v) => v.status === 'publicado').length;
   const soldThisMonth    = vehicles.filter((v) => v.status === 'vendido' && v.soldDate?.startsWith(thisMonth));
 
-  const monthRevenue = soldThisMonth.reduce((acc, v) => acc + (v.soldPrice ?? 0), 0)
+  // Ingresos = GANANCIA de las ventas (precio − costo), no el precio total. Comprar el auto
+  // no es gasto (es capital), así que el costo no figura como egreso: ya está en la ganancia.
+  const monthRevenue = soldThisMonth.reduce((acc, v) => acc + Math.max(0, (v.soldPrice ?? 0) - v.purchasePrice), 0)
     + transactions
         .filter((t) => t.type === 'ingreso' && t.date.startsWith(thisMonth))
         .reduce((acc, t) => acc + t.amount, 0);
@@ -39,7 +41,8 @@ export function Dashboard() {
     + taxPayments
         .filter((t) => t.paid && t.paidDate?.startsWith(thisMonth))
         .reduce((acc, t) => acc + t.amount, 0)
-    + soldThisMonth.reduce((acc, v) => acc + v.purchasePrice, 0);
+    // Solo cuenta como egreso si se vendió a pérdida (costo mayor al precio).
+    + soldThisMonth.reduce((acc, v) => acc + Math.max(0, v.purchasePrice - (v.soldPrice ?? 0)), 0);
 
   const monthIIBB = (soldThisMonth.reduce((acc, v) => acc + (v.soldPrice ?? 0), 0)) * (settings.iibbRate / 100);
   const monthProfit = monthRevenue - monthExpenses;
@@ -77,7 +80,7 @@ export function Dashboard() {
     const monthLabel = d.toLocaleString('es-AR', { month: 'short' });
     const ingresos = vehicles
       .filter((v) => v.status === 'vendido' && v.soldDate?.startsWith(m))
-      .reduce((acc, v) => acc + (v.soldPrice ?? 0), 0);
+      .reduce((acc, v) => acc + Math.max(0, (v.soldPrice ?? 0) - v.purchasePrice), 0);
     const gastos = expenses
       .filter((e) => e.date.startsWith(m))
       .reduce((acc, e) => acc + e.amount, 0)
@@ -92,7 +95,7 @@ export function Dashboard() {
           .reduce((acc, t) => acc + t.amount, 0)
       + vehicles
           .filter((v) => v.status === 'vendido' && v.soldDate?.startsWith(m))
-          .reduce((acc, v) => acc + v.purchasePrice, 0);
+          .reduce((acc, v) => acc + Math.max(0, v.purchasePrice - (v.soldPrice ?? 0)), 0);
     const ingresosTx = transactions
       .filter((t) => t.type === 'ingreso' && t.date.startsWith(m))
       .reduce((acc, t) => acc + t.amount, 0);

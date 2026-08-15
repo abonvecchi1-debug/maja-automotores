@@ -79,29 +79,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           className="px-6 py-5 flex-shrink-0 flex items-center justify-between"
           style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 384.2 79.64"
-            fill="white"
+          <img
+            src="/maja-logo-blanco.png"
+            alt="Maja Automotores"
             className="w-full max-w-[190px] h-auto"
-            aria-label="Maja Automotores"
-          >
-            <polygon points="240.46 0 240.46 52.83 223.88 52.83 223.88 13.55 181.77 52.83 162.35 52.83 219.03 0 240.46 0"/>
-            <polygon points="152.92 0 152.92 52.83 136.34 52.83 136.34 13.55 94.22 52.83 78.05 52.83 78.05 13.55 35.94 52.83 16.96 52.83 0 35.92 9.54 27.11 27.13 43.35 73.64 0 94.63 0 94.63 34.83 131.99 0 152.92 0"/>
-            <polygon points="323.73 0 342.76 0 286.06 52.83 267.12 52.83 250.12 35.92 259.66 27.11 277.24 43.35 323.73 0"/>
-            <polygon points="384.2 0 384.2 52.83 367.62 52.83 367.62 13.55 325.51 52.83 306.09 52.83 362.77 0 384.2 0"/>
-            <text
-              transform="translate(75.35 79.02)"
-              fontSize="11.94"
-              fontFamily="Inter, system-ui, sans-serif"
-              fontWeight="600"
-              letterSpacing="2.4"
-              fill="white"
-              opacity="0.65"
-            >
-              AUTOMOTORES
-            </text>
-          </svg>
+          />
           {/* Mobile close button */}
           <button
             onClick={onClose}

@@ -11,22 +11,17 @@ import { notify } from '../components/ui/Feedback';
 const NAVY: [number, number, number] = [38, 46, 99];
 const CONTACT_KEY = 'maja-quote-contact';
 
-/** Rasteriza el logo blanco (SVG) a PNG nítido para meterlo en el PDF sobre el navy. */
+/** Carga el logo blanco real de Maja (PNG) como data URL para el PDF. */
 async function loadLogoPng(): Promise<string | null> {
   try {
-    const res = await fetch('/logo-full-white.svg');
-    let svg = await res.text();
-    if (!/<svg[^>]*\swidth=/.test(svg)) svg = svg.replace('<svg', '<svg width="1153" height="239"');
-    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    try {
-      const img = new Image();
-      await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(new Error('img')); img.src = url; });
-      const canvas = document.createElement('canvas');
-      canvas.width = 1153; canvas.height = 239;
-      canvas.getContext('2d')!.drawImage(img, 0, 0, 1153, 239);
-      return canvas.toDataURL('image/png');
-    } finally { URL.revokeObjectURL(url); }
+    const res = await fetch('/maja-logo-blanco.png');
+    const blob = await res.blob();
+    return await new Promise((resolve) => {
+      const r = new FileReader();
+      r.onloadend = () => resolve(typeof r.result === 'string' ? r.result : null);
+      r.onerror = () => resolve(null);
+      r.readAsDataURL(blob);
+    });
   } catch { return null; }
 }
 
@@ -69,7 +64,7 @@ export function Quotes() {
       const headH = 46;
       doc.setFillColor(...NAVY);
       doc.rect(0, 0, W, headH, 'F');
-      if (logo) doc.addImage(logo, 'PNG', 14, 13, 64, 64 * 239 / 1153);
+      if (logo) doc.addImage(logo, 'PNG', 14, 13, 64, 64 * 80 / 385);
       else { doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(24); doc.text('MAJA', 14, 28); }
       // Contacto a la derecha
       doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
