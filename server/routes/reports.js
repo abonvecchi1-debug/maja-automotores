@@ -65,7 +65,7 @@ router.get('/balance', authenticateToken, requireAdmin, (req, res) => {
   const ingresosFinanzas = db.prepare(`
     SELECT id, description, date, amount, category
     FROM transactions
-    WHERE type = 'ingreso' AND date >= ? AND date <= ?
+    WHERE type = 'ingreso' AND category != 'saldo_inicial' AND date >= ? AND date <= ?
     ORDER BY date
   `).all(from, to);
 

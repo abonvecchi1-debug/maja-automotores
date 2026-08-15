@@ -26,7 +26,7 @@ export function Dashboard() {
   // no es gasto (es capital), así que el costo no figura como egreso: ya está en la ganancia.
   const monthRevenue = soldThisMonth.reduce((acc, v) => acc + Math.max(0, (v.soldPrice ?? 0) - v.purchasePrice), 0)
     + transactions
-        .filter((t) => t.type === 'ingreso' && t.date.startsWith(thisMonth))
+        .filter((t) => t.type === 'ingreso' && t.category !== 'saldo_inicial' && t.date.startsWith(thisMonth))
         .reduce((acc, t) => acc + t.amount, 0);
 
   const monthExpenses = expenses
@@ -97,7 +97,7 @@ export function Dashboard() {
           .filter((v) => v.status === 'vendido' && v.soldDate?.startsWith(m))
           .reduce((acc, v) => acc + Math.max(0, v.purchasePrice - (v.soldPrice ?? 0)), 0);
     const ingresosTx = transactions
-      .filter((t) => t.type === 'ingreso' && t.date.startsWith(m))
+      .filter((t) => t.type === 'ingreso' && t.category !== 'saldo_inicial' && t.date.startsWith(m))
       .reduce((acc, t) => acc + t.amount, 0);
     return { mes: monthLabel, ingresos: Math.round((ingresos + ingresosTx) / 1000), gastos: Math.round(gastos / 1000) };
   });
