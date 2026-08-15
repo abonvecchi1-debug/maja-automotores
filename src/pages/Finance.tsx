@@ -73,7 +73,7 @@ const sourceTag: Record<MovSource, string> = {
 };
 
 export function Finance() {
-  const { transactions, vehicles, sales, installmentPayments, cheques, expenses, fixedExpenseRecords, taxPayments, addTransaction, deleteTransaction, markTransactionPaid } = useStore();
+  const { transactions, vehicles, sales, installmentPayments, cheques, expenses, fixedExpenseRecords, taxPayments, usdOperations, addTransaction, deleteTransaction, markTransactionPaid } = useStore();
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
@@ -105,8 +105,9 @@ export function Finance() {
       });
     }
   }
-  // Transacciones manuales de Finanzas
+  // Transacciones manuales de Finanzas (el "saldo inicial" no es un movimiento del mes)
   for (const t of transactions) {
+    if (t.category === 'saldo_inicial') continue;
     movements.push({
       key: `tx-${t.id}`, source: 'tx', type: t.type, category: t.category, description: t.description,
       amount: t.amount, date: t.date, paid: t.type === 'ingreso' ? true : (t.paid ?? true), paidDate: t.paidDate, txId: t.id,
@@ -165,65 +166,74 @@ export function Finance() {
   const categories = form.type === 'ingreso' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
   // ── Disponibilidad (snapshot total de caja, no depende del mes) ────────────
-  // Plata líquida que entró menos la que salió (de lo registrado). No descuenta la
-  // compra del stock que no esté cargada como egreso. "En cheques" = cartera.
+  // Anclado a un "saldo inicial": lo que había en caja a una fecha (transacción con
+  // categoría 'saldo_inicial'). Todo lo anterior a esa fecha queda absorbido en ese
+  // saldo; de ahí en más suma lo que entra y resta lo que sale. Sin saldo inicial
+  // cargado, se comporta como antes (cuenta todo el historial).
   const isLiquid = (m?: string) => !!m && LIQUID_METHODS.includes(m as never);
+  const anchorTxs = transactions.filter((t) => t.category === 'saldo_inicial');
+  const openingBalance = anchorTxs.reduce((a, t) => a + t.amount, 0);
+  const anchorDate = anchorTxs.reduce((a, t) => (t.date > a ? t.date : a), '');
+  const after = (d?: string) => !anchorDate || (!!d && d > anchorDate);
 
   let saleLiquid = 0;
-  for (const v of vehicles.filter((v) => v.status === 'vendido')) {
+  for (const v of vehicles.filter((v) => v.status === 'vendido' && after(v.soldDate))) {
     const sale = sales.find((s) => s.id === v.saleId) ?? sales.find((s) => s.vehicleId === v.id);
     if (sale?.paymentMethods?.length) {
-      // El desglose ya excluye lo que no es plata (parte de pago, cheque).
       saleLiquid += sale.paymentMethods.filter((p) => isLiquid(p.method)).reduce((a, p) => a + p.amount, 0);
     } else if (sale) {
-      // Sin desglose: el precio puede incluir un auto en parte de pago (no es plata) → descontarlo.
       saleLiquid += sale.paymentType === 'financiado'
         ? (sale.downPayment ?? 0)
         : Math.max(0, (sale.salePrice ?? v.soldPrice ?? 0) - (sale.tradeInValue ?? 0));
     } else {
-      // Venta desde el vehículo (sin registro de venta): si recibimos un auto en parte de
-      // pago, descontar su valor (es stock, no plata líquida).
-      const tradeInVal = v.tradeInVehicleId
-        ? (vehicles.find((x) => x.id === v.tradeInVehicleId)?.purchasePrice ?? 0)
-        : 0;
+      const tradeInVal = v.tradeInVehicleId ? (vehicles.find((x) => x.id === v.tradeInVehicleId)?.purchasePrice ?? 0) : 0;
       saleLiquid += Math.max(0, (v.soldPrice ?? 0) - tradeInVal);
     }
   }
-  const collectedInstallments = installmentPayments.filter((p) => p.paid).reduce((a, p) => a + (p.paidAmount ?? p.amount), 0);
-  const manualIncome = transactions.filter((t) => t.type === 'ingreso').reduce((a, t) => a + t.amount, 0);
-  // Señas ahora viven en el vehículo: venta activa (señado) suma; compra (mientras está señado) resta.
+  const collectedInstallments = installmentPayments.filter((p) => p.paid && after(p.paidDate)).reduce((a, p) => a + (p.paidAmount ?? p.amount), 0);
+  const manualIncome = transactions.filter((t) => t.type === 'ingreso' && t.category !== 'saldo_inicial' && after(t.date)).reduce((a, t) => a + t.amount, 0);
   const senaVentaActiva = vehicles
-    .filter((v) => v.status === 'señado' && v.senaType === 'venta' && (v.senaAmount ?? 0) > 0 && isLiquid(v.senaMethod))
+    .filter((v) => v.status === 'señado' && v.senaType === 'venta' && (v.senaAmount ?? 0) > 0 && isLiquid(v.senaMethod) && after(v.senaDate))
     .reduce((a, v) => a + (v.senaAmount ?? 0), 0);
-  // Mientras la compra está señada solo salió la seña (el precio total se descuenta recién al completar la compra).
   const senaCompra = vehicles
-    .filter((v) => v.status === 'señado' && v.senaType === 'compra' && (v.senaAmount ?? 0) > 0 && isLiquid(v.senaMethod))
+    .filter((v) => v.status === 'señado' && v.senaType === 'compra' && (v.senaAmount ?? 0) > 0 && isLiquid(v.senaMethod) && after(v.senaDate))
     .reduce((a, v) => a + (v.senaAmount ?? 0), 0);
-  // Compra de vehículos pagada en plata: descuenta el precio de compra. Excluye los recibidos
-  // en parte de pago (no salió plata) y los que están señados como compra (solo salió la seña).
+  // Comprar autos NO es un gasto: la plata pasa a CAPITAL (stock). Del disponible solo se
+  // descuentan las compras POSTERIORES al saldo inicial (las de antes ya están en ese saldo).
   const comprasVehiculos = vehicles
-    .filter((v) => v.acquiredAs !== 'parte_pago' && !(v.status === 'señado' && v.senaType === 'compra'))
+    .filter((v) => v.acquiredAs !== 'parte_pago' && !(v.status === 'señado' && v.senaType === 'compra') && after(v.purchaseDate))
     .reduce((a, v) => a + (v.purchasePrice ?? 0), 0);
-  const chequesCobrados = cheques.filter((c) => c.moneda === 'ARS' && c.estado === 'cobrado').reduce((a, c) => a + c.monto, 0);
-  // Cheques que RECIBIMOS (de una venta u otro) y después endosamos/entregamos para pagar algo
-  // (una compra de auto o un gasto). Ese egreso ya se descontó del disponible arriba, pero NO
-  // salió plata nuestra: lo pagó el cheque. Si no los sumáramos de vuelta, el disponible restaría
-  // esa compra dos veces (una como cheque que nunca cobramos, otra como precio de compra).
-  const chequesEndosados = cheques
-    .filter((c) => c.moneda === 'ARS' && c.estado === 'entregado' && c.recibidoDe)
+  // Cheques recibidos en cartera/depositados/cobrados = plata a cobrar → suman al disponible.
+  // Los entregados/endosados (usados para pagar) y los rechazados no cuentan.
+  const chequesDisponibles = cheques
+    .filter((c) => c.moneda === 'ARS' && ['en_cartera', 'depositado', 'cobrado'].includes(c.estado))
     .reduce((a, c) => a + c.monto, 0);
-  const manualPaidExpense = transactions.filter((t) => t.type === 'egreso' && t.paid !== false).reduce((a, t) => a + t.amount, 0);
-  const gastosVarPaid = expenses.filter((e) => e.paid).reduce((a, e) => a + e.amount, 0);
-  const gastosFijosPaid = fixedExpenseRecords.filter((r) => r.paid).reduce((a, r) => a + r.amount, 0);
-  const impuestosPaid = taxPayments.filter((t) => t.paid).reduce((a, t) => a + t.amount, 0);
+  // Los egresos cuentan post-ancla por su FECHA DE PAGO (cuándo salió la plata), no por
+  // fecha nominal/vencimiento: un gasto con vencimiento futuro pero ya pagado antes del
+  // saldo inicial ya está descontado del efectivo → no se resta de nuevo.
+  const manualPaidExpense = transactions.filter((t) => t.type === 'egreso' && t.paid !== false && after(t.paidDate ?? t.date)).reduce((a, t) => a + t.amount, 0);
+  const gastosVarPaid = expenses.filter((e) => e.paid && after(e.paidDate ?? e.date)).reduce((a, e) => a + e.amount, 0);
+  const gastosFijosPaid = fixedExpenseRecords.filter((r) => r.paid && after(r.paidDate ?? (r.dueDate || `${r.month}-01`))).reduce((a, r) => a + r.amount, 0);
+  const impuestosPaid = taxPayments.filter((t) => t.paid && after(t.paidDate)).reduce((a, t) => a + t.amount, 0);
 
-  const disponible = saleLiquid + collectedInstallments + manualIncome + senaVentaActiva + chequesCobrados + chequesEndosados
+  const disponible = openingBalance + saleLiquid + collectedInstallments + manualIncome + senaVentaActiva + chequesDisponibles
     - manualPaidExpense - gastosVarPaid - gastosFijosPaid - impuestosPaid - senaCompra - comprasVehiculos;
 
+  // Capital = costo de todos los autos en stock (comprados o de canje). No es gasto: es inventario.
+  const capital = vehicles.filter((v) => v.status !== 'vendido').reduce((a, v) => a + (v.purchasePrice ?? 0), 0);
+
+  // Cheques a cobrar (pendientes) — ya están dentro del disponible; se muestran a la vista.
   const chequesEnCarteraEstados = ['en_cartera', 'depositado'];
-  const enChequesARS = cheques.filter((c) => c.moneda === 'ARS' && chequesEnCarteraEstados.includes(c.estado)).reduce((a, c) => a + c.monto, 0);
-  const enChequesUSD = cheques.filter((c) => c.moneda === 'USD' && chequesEnCarteraEstados.includes(c.estado)).reduce((a, c) => a + c.monto, 0);
-  const enChequesCount = cheques.filter((c) => chequesEnCarteraEstados.includes(c.estado)).length;
+  const chequesACobrar = cheques.filter((c) => c.moneda === 'ARS' && chequesEnCarteraEstados.includes(c.estado)).reduce((a, c) => a + c.monto, 0);
+  const chequesACobrarCount = cheques.filter((c) => c.moneda === 'ARS' && chequesEnCarteraEstados.includes(c.estado)).length;
+
+  // Disponible en dólares (tenencia del módulo Dólares) + su valor en pesos al promedio.
+  let usdHoldings = 0, usdPool = 0;
+  for (const o of [...usdOperations].sort((a, b) => (a.date + a.createdAt).localeCompare(b.date + b.createdAt))) {
+    if (o.type === 'compra') { usdHoldings += o.amountUsd; usdPool += o.amountPesos; }
+    else { const avg = usdHoldings > 0 ? usdPool / usdHoldings : 0; usdPool -= o.amountUsd * avg; usdHoldings -= o.amountUsd; }
+  }
+  usdHoldings = Math.max(0, usdHoldings); usdPool = Math.max(0, usdPool);
   const fmtUSD = (n: number) => 'U$S ' + n.toLocaleString('es-AR', { maximumFractionDigits: 0 });
 
   const handleSave = () => {
@@ -259,28 +269,44 @@ export function Finance() {
 
       {/* Disponibilidad (total, no depende del mes) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className={`sm:col-span-2 ${disponible >= 0 ? 'bg-brand-50' : 'bg-red-50'}`}>
+        {/* Disponible en pesos */}
+        <Card className={disponible >= 0 ? 'bg-brand-50' : 'bg-red-50'}>
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${disponible >= 0 ? 'bg-brand-100' : 'bg-red-100'}`}>
               <Wallet size={22} className={disponible >= 0 ? 'text-brand-600' : 'text-red-600'} />
             </div>
             <div className="min-w-0">
-              <p className="text-xs text-slate-500 font-medium">Disponible (efectivo + banco)</p>
+              <p className="text-xs text-slate-500 font-medium">Disponible en pesos</p>
               <p className={`text-2xl font-bold ${disponible >= 0 ? 'text-brand-700' : 'text-red-700'}`}>{formatCurrency(disponible)}</p>
-              <p className="text-[11px] text-slate-400">Plata líquida: ingresos cobrados menos egresos pagados y compras de vehículos (precio de compra). Los autos recibidos en parte de pago no descuentan, y los cheques que endosaste para pagar no restan (los pagó el cheque, no tu caja).</p>
+              <p className="text-[11px] text-slate-400">
+                Efectivo + banco{chequesACobrar > 0 ? <> · incluye <b>{formatCurrency(chequesACobrar)}</b> en {chequesACobrarCount} cheque{chequesACobrarCount !== 1 ? 's' : ''} a cobrar</> : ''}
+              </p>
             </div>
           </div>
         </Card>
-        <Card className="bg-purple-50">
+        {/* Disponible en dólares */}
+        <Card className="bg-emerald-50">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-purple-100 rounded-xl">
-              <FileText size={22} className="text-purple-600" />
+            <div className="p-2.5 bg-emerald-100 rounded-xl">
+              <DollarSign size={22} className="text-emerald-600" />
             </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">En cheques (cartera)</p>
-              <p className="text-2xl font-bold text-purple-700">{formatCurrency(enChequesARS)}</p>
-              {enChequesUSD > 0 && <p className="text-xs font-semibold text-purple-600">+ {fmtUSD(enChequesUSD)}</p>}
-              <p className="text-[11px] text-slate-400">{enChequesCount} cheque{enChequesCount !== 1 ? 's' : ''} · pasan a disponible al cobrarse</p>
+            <div className="min-w-0">
+              <p className="text-xs text-slate-500 font-medium">Disponible en dólares</p>
+              <p className="text-2xl font-bold text-emerald-700">{fmtUSD(usdHoldings)}</p>
+              <p className="text-[11px] text-slate-400">{usdPool > 0 ? <>≈ {formatCurrency(usdPool)} · promedio {formatCurrency(usdHoldings > 0 ? usdPool / usdHoldings : 0)}/US$</> : 'Cargá compras en Dólares'}</p>
+            </div>
+          </div>
+        </Card>
+        {/* Capital (inventario) */}
+        <Card className="bg-amber-50">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-amber-100 rounded-xl">
+              <Car size={22} className="text-amber-600" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-slate-500 font-medium">Capital (autos en stock)</p>
+              <p className="text-2xl font-bold text-amber-700">{formatCurrency(capital)}</p>
+              <p className="text-[11px] text-slate-400">Costo de tus autos en stock. No es gasto: es tu capital invertido.</p>
             </div>
           </div>
         </Card>
