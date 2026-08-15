@@ -41,6 +41,8 @@ const INITIAL_FORM = {
 const categoryLabel: Record<string, string> = {
   venta_contado: 'Venta contado',
   venta_vehiculo: 'Venta de vehículo',
+  ganancia_venta: 'Ganancia de venta',
+  perdida_venta: 'Pérdida de venta',
   cuota: 'Cuota',
   seña: 'Seña',
   otro_ingreso: 'Otro ingreso',
@@ -92,18 +94,17 @@ export function Finance() {
   const movements: Movement[] = [];
   // Ventas (ingreso) y costo de compra del auto vendido (egreso), imputados al mes de venta
   for (const v of vehicles.filter((v) => v.status === 'vendido' && v.soldDate)) {
+    // La venta se marca por su GANANCIA (precio − costo), no por el precio total. Comprar el
+    // auto no fue un gasto (fue capital), así que su costo NO figura como egreso: ya está
+    // descontado dentro de la ganancia. Si vendiste a pérdida, se marca como egreso.
+    const resultado = (v.soldPrice ?? 0) - (v.purchasePrice ?? 0);
     movements.push({
-      key: `venta-${v.id}`, source: 'venta', type: 'ingreso', category: 'venta_vehiculo',
-      description: `Venta ${v.brand} ${v.model}${v.year ? ' ' + v.year : ''}`.trim(),
-      amount: v.soldPrice ?? 0, date: v.soldDate!, paid: true, vehicleId: v.id,
+      key: `venta-${v.id}`, source: 'venta',
+      type: resultado >= 0 ? 'ingreso' : 'egreso',
+      category: resultado >= 0 ? 'ganancia_venta' : 'perdida_venta',
+      description: `${resultado >= 0 ? 'Ganancia' : 'Pérdida'} · ${v.brand} ${v.model}${v.year ? ' ' + v.year : ''}`.trim(),
+      amount: Math.abs(resultado), date: v.soldDate!, paid: true, vehicleId: v.id,
     });
-    if ((v.purchasePrice ?? 0) > 0) {
-      movements.push({
-        key: `costo-${v.id}`, source: 'costo', type: 'egreso', category: 'costo_vehiculo',
-        description: `Costo de compra · ${v.brand} ${v.model}`,
-        amount: v.purchasePrice, date: v.soldDate!, paid: true, vehicleId: v.id,
-      });
-    }
   }
   // Transacciones manuales de Finanzas (el "saldo inicial" no es un movimiento del mes)
   for (const t of transactions) {
@@ -339,7 +340,7 @@ export function Finance() {
             <div>
               <p className="text-xs text-slate-500 font-medium">Ingresos</p>
               <p className="text-xl font-bold text-green-700">{formatCurrency(monthIncome)}</p>
-              <p className="text-[11px] text-slate-400">ventas + ingresos de finanzas</p>
+              <p className="text-[11px] text-slate-400">ganancia de ventas + ingresos de finanzas</p>
             </div>
           </div>
         </Card>
@@ -352,7 +353,7 @@ export function Finance() {
               <p className="text-xs text-slate-500 font-medium">Egresos</p>
               <p className="text-xl font-bold text-red-700">{formatCurrency(monthExpense)}</p>
               <p className="text-[11px] text-slate-400">
-                gastos, impuestos y costo de autos vendidos
+                gastos e impuestos (comprar autos no es gasto)
                 {pendingExpense > 0 && <span className="text-amber-600 font-medium"> · {formatCurrency(pendingExpense)} pendiente</span>}
               </p>
             </div>
