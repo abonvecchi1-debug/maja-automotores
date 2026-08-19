@@ -50,7 +50,8 @@ function daysUntil(dateStr: string) {
 }
 
 function vencimientoAlert(cheque: Cheque) {
-  if (cheque.estado === 'cobrado' || cheque.estado === 'depositado' || cheque.estado === 'rechazado') return null;
+  // Un cheque entregado (ya lo pasaste a otro) no es tuyo: su vencimiento no te vence a vos.
+  if (['cobrado', 'depositado', 'rechazado', 'entregado'].includes(cheque.estado)) return null;
   const days = daysUntil(cheque.fechaVencimiento);
   if (days === null) return null;
   if (days < 0) return 'vencido';

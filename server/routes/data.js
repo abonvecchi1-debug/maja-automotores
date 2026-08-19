@@ -106,7 +106,7 @@ const mapCheque = (r) => ({
   endosadoPor: r.endosado_por ?? '', dniEndosante: r.dni_endosante ?? '',
   librador: r.librador, cuitLibrador: r.cuit_librador, recibidoDe: r.recibido_de,
   entregadoA: r.entregado_a, estado: r.estado, observaciones: r.observaciones,
-  saleId: n(r.sale_id), createdAt: r.created_at,
+  saleId: n(r.sale_id), purchaseVehicleId: n(r.purchase_vehicle_id), createdAt: r.created_at,
 });
 const mapSena = (r) => ({
   id: r.id, type: r.type, vehicleId: n(r.vehicle_id), clientId: n(r.client_id),

@@ -327,6 +327,9 @@ try { db.exec(`ALTER TABLE installment_payments ADD COLUMN paid_amount REAL`); }
 try { db.exec(`ALTER TABLE installment_payments ADD COLUMN inflation_rate REAL`); } catch {}
 // Vínculo de un cheque con la venta que lo originó
 try { db.exec(`ALTER TABLE cheques ADD COLUMN sale_id TEXT`); } catch {}
+// Vínculo de un cheque de cartera ENTREGADO para pagar la compra de un auto (para que
+// esa compra no descuente doble del Disponible: la pagó el cheque, no el efectivo).
+try { db.exec(`ALTER TABLE cheques ADD COLUMN purchase_vehicle_id TEXT`); } catch {}
 // Seña sobre el vehículo (reserva con depósito): venta = me lo señaron, compra = yo lo señé
 try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_amount REAL`); } catch {}
 try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_date TEXT`); } catch {}

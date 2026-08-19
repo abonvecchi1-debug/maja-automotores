@@ -201,9 +201,14 @@ export function Finance() {
     .reduce((a, v) => a + (v.senaAmount ?? 0), 0);
   // Comprar autos NO es un gasto: la plata pasa a CAPITAL (stock). Del disponible solo se
   // descuentan las compras POSTERIORES al saldo inicial (las de antes ya están en ese saldo).
+  // Si parte de la compra se pagó con un cheque de cartera, esa parte la pagó el cheque (que
+  // ya salió del disponible al pasar a "entregado"), así que no se descuenta de nuevo.
+  const chequePagoAuto = (vid: string) => cheques
+    .filter((c) => c.moneda === 'ARS' && c.estado === 'entregado' && c.purchaseVehicleId === vid)
+    .reduce((a, c) => a + c.monto, 0);
   const comprasVehiculos = vehicles
     .filter((v) => v.acquiredAs !== 'parte_pago' && !(v.status === 'señado' && v.senaType === 'compra') && after(v.purchaseDate))
-    .reduce((a, v) => a + (v.purchasePrice ?? 0), 0);
+    .reduce((a, v) => a + Math.max(0, (v.purchasePrice ?? 0) - chequePagoAuto(v.id)), 0);
   // Cheques recibidos en cartera/depositados/cobrados = plata a cobrar → suman al disponible.
   // Los entregados/endosados (usados para pagar) y los rechazados no cuentan.
   const chequesDisponibles = cheques

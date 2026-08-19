@@ -83,7 +83,7 @@ const INITIAL_FORM = {
 export function Vehicles() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { vehicles, expenses, addVehicle, suppliers } = useStore();
+  const { vehicles, expenses, addVehicle, suppliers, cheques } = useStore();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') ?? '');
   const [brandFilter, setBrandFilter] = useState('');
@@ -92,6 +92,7 @@ export function Vehicles() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
   const [formError, setFormError] = useState('');
+  const [payChequeIds, setPayChequeIds] = useState<string[]>([]);
   const [pendingImages, setPendingImages] = useState<{ file: File; preview: string }[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -169,9 +170,10 @@ export function Vehicles() {
         images: uploadedUrls,
         checklist: { lavado: false, pulido: false, mecanica: false, papeles: false },
         documents: { titulo: false, cedulaVerde: false, cedulaAzul: false, vtv: false, libreDeuda: false, verificacionPolicial: false, seguro: false },
-      });
+      }, payChequeIds);
       setShowModal(false);
       setForm(INITIAL_FORM);
+      setPayChequeIds([]);
       pendingImages.forEach((img) => URL.revokeObjectURL(img.preview));
       setPendingImages([]);
     } catch {
@@ -184,6 +186,7 @@ export function Vehicles() {
   const handleCloseModal = () => {
     setShowModal(false);
     setForm(INITIAL_FORM);
+    setPayChequeIds([]);
     setFormError('');
     pendingImages.forEach((img) => URL.revokeObjectURL(img.preview));
     setPendingImages([]);
@@ -413,6 +416,30 @@ export function Vehicles() {
               placeholder="Sin especificar"
             />
           </div>
+          {cheques.filter((c) => c.moneda === 'ARS' && c.estado === 'en_cartera').length > 0 && (
+            <div className="col-span-1 sm:col-span-2 border border-slate-200 rounded-xl p-3">
+              <p className="text-sm font-semibold text-slate-700">¿Pagaste con cheque(s) de tu cartera?</p>
+              <p className="text-[11px] text-slate-400 mb-2">Los que marques quedan como <b>entregados</b> por esta compra (salen de tu cartera y no descuentan doble del disponible).</p>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                {cheques.filter((c) => c.moneda === 'ARS' && c.estado === 'en_cartera').map((c) => (
+                  <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-brand-600"
+                      checked={payChequeIds.includes(c.id)}
+                      onChange={(e) => setPayChequeIds((ids) => e.target.checked ? [...ids, c.id] : ids.filter((x) => x !== c.id))}
+                    />
+                    <span>{formatCurrency(c.monto)} · N°{c.numero} {c.banco} · vence {c.fechaVencimiento || '-'}</span>
+                  </label>
+                ))}
+              </div>
+              {payChequeIds.length > 0 && (
+                <p className="text-[11px] font-medium text-brand-600 mt-2">
+                  {payChequeIds.length} cheque{payChequeIds.length !== 1 ? 's' : ''} · {formatCurrency(cheques.filter((c) => payChequeIds.includes(c.id)).reduce((a, c) => a + c.monto, 0))}
+                </p>
+              )}
+            </div>
+          )}
           <div className="col-span-1 sm:col-span-2">
             <Textarea label="Notas" value={form.notes} onChange={(e) => field('notes', e.target.value)} placeholder="Observaciones del vehículo..." />
           </div>

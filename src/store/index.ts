@@ -37,7 +37,7 @@ interface AppStore {
 
   loadAll: (silent?: boolean) => Promise<void>;
 
-  addVehicle: (v: Omit<Vehicle, 'id' | 'createdAt'>) => void;
+  addVehicle: (v: Omit<Vehicle, 'id' | 'createdAt'>, payChequeIds?: string[]) => void;
   updateVehicle: (id: string, data: Partial<Vehicle>) => void;
   deleteVehicle: (id: string) => void;
 
@@ -202,7 +202,7 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   // ── Vehicles ───────────────────────────────────────────────────────────
-  addVehicle: (v) => {
+  addVehicle: (v, payChequeIds = []) => {
     const tempId = uid();
     const optimistic: Vehicle = {
       ...v, id: tempId, createdAt: now(),
@@ -213,7 +213,16 @@ export const useStore = create<AppStore>((set, get) => ({
     sync(
       () => authFetch('/api/vehicles', { method: 'POST', body: JSON.stringify(v) })
         .then((r) => r.json())
-        .then(({ vehicle }) => set((s) => ({ vehicles: s.vehicles.map((x) => x.id === tempId ? vehicle : x) }))),
+        .then(({ vehicle }) => {
+          set((s) => ({ vehicles: s.vehicles.map((x) => x.id === tempId ? vehicle : x) }));
+          // Cheques de cartera entregados para pagar esta compra → se marcan entregados y se
+          // vinculan al auto (para que la compra no descuente doble del Disponible).
+          if (payChequeIds.length) {
+            const sup = get().suppliers.find((x) => x.id === v.purchaseSupplierId);
+            const entregadoA = sup?.name || `Compra ${v.brand} ${v.model}`.trim();
+            for (const cid of payChequeIds) get().updateCheque(cid, { estado: 'entregado', purchaseVehicleId: vehicle.id, entregadoA });
+          }
+        }),
       () => set((s) => ({ vehicles: s.vehicles.filter((x) => x.id !== tempId) }))
     );
   },

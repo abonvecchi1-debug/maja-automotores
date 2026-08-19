@@ -365,6 +365,7 @@ export interface Cheque {
   estado: ChequeEstado;
   observaciones: string;
   saleId?: string;        // si el cheque vino de una venta
+  purchaseVehicleId?: string; // si se entregó de cartera para pagar la compra de un auto
   createdAt: string;
 }
 

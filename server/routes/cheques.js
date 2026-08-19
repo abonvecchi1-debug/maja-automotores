@@ -27,6 +27,7 @@ const map = (r) => ({
   estado: r.estado,
   observaciones: r.observaciones,
   saleId: r.sale_id ?? undefined,
+  purchaseVehicleId: r.purchase_vehicle_id ?? undefined,
   createdAt: r.created_at,
 });
 
@@ -72,7 +73,7 @@ router.put('/:id', (req, res) => {
   db.prepare(`UPDATE cheques SET
     numero=?,serie=?,banco=?,monto=?,moneda=?,fecha_emision=?,fecha_vencimiento=?,tipo=?,
     al_portador=?,endosado=?,endosado_por=?,dni_endosante=?,librador=?,cuit_librador=?,recibido_de=?,entregado_a=?,
-    estado=?,observaciones=?
+    estado=?,observaciones=?,purchase_vehicle_id=?
     WHERE id=?`)
     .run(
       b.numero ?? ex.numero,
@@ -93,6 +94,7 @@ router.put('/:id', (req, res) => {
       b.entregadoA !== undefined ? b.entregadoA : ex.entregado_a,
       b.estado ?? ex.estado,
       b.observaciones !== undefined ? b.observaciones : ex.observaciones,
+      b.purchaseVehicleId !== undefined ? b.purchaseVehicleId : (ex.purchase_vehicle_id ?? null),
       id,
     );
   res.json({ cheque: map(db.prepare('SELECT * FROM cheques WHERE id = ?').get(id)) });
