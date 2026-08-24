@@ -366,6 +366,17 @@ export interface Cheque {
   observaciones: string;
   saleId?: string;        // si el cheque vino de una venta
   purchaseVehicleId?: string; // si se entregó de cartera para pagar la compra de un auto
+  purchaseAssetId?: string;   // si se entregó de cartera para pagar un bien de capital
+  createdAt: string;
+}
+
+// ─── Bienes de capital (trailer, herramientas, etc. — suman al Capital, no son gasto) ──
+export interface CapitalAsset {
+  id: string;
+  description: string;
+  value: number;        // costo / valor (suma al Capital)
+  purchaseDate: string;
+  notes: string;
   createdAt: string;
 }
 

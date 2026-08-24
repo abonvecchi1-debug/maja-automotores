@@ -24,6 +24,7 @@ import { Credits } from './pages/Credits';
 import { Reports } from './pages/Reports';
 import { Cheques } from './pages/Cheques';
 import { Dollars } from './pages/Dollars';
+import { CapitalAssets } from './pages/CapitalAssets';
 import { Quotes } from './pages/Quotes';
 import { SyncSettings } from './pages/SyncSettings';
 
@@ -158,6 +159,7 @@ export default function App() {
             <Route path="creditos" element={<Credits />} />
             <Route path="cheques" element={<Cheques />} />
             <Route path="dolares" element={<ProtectedRoute allowedRoles={['admin']}><Dollars /></ProtectedRoute>} />
+            <Route path="bienes-capital" element={<ProtectedRoute allowedRoles={['admin']}><CapitalAssets /></ProtectedRoute>} />
             <Route path="reportes" element={<ProtectedRoute allowedRoles={['admin']}><Reports /></ProtectedRoute>} />
             <Route path="sincronizacion" element={<ProtectedRoute allowedRoles={['admin']}><SyncSettings /></ProtectedRoute>} />
           </Route>

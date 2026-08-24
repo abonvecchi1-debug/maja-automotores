@@ -6,7 +6,7 @@ import type {
   Supplier, FixedExpenseType, FixedExpenseRecord,
   Task, Transaction, AppSettings,
   Transfer08, Lead, DailyCash, CashMovement, TaxPayment,
-  Cheque, Sena, TradeInInput, UsdOperation,
+  Cheque, Sena, TradeInInput, UsdOperation, CapitalAsset,
 } from '../types';
 
 // ─── Store Interface ───────────────────────────────────────────────────────
@@ -31,6 +31,7 @@ interface AppStore {
   cheques: Cheque[];
   senas: Sena[];
   usdOperations: UsdOperation[];
+  capitalAssets: CapitalAsset[];
 
   initialized: boolean;
   loading: boolean;
@@ -103,6 +104,9 @@ interface AppStore {
   addUsdOperation: (o: Omit<UsdOperation, 'id' | 'createdAt'>) => void;
   deleteUsdOperation: (id: string) => void;
 
+  addCapitalAsset: (a: Omit<CapitalAsset, 'id' | 'createdAt'>, payChequeIds?: string[]) => void;
+  deleteCapitalAsset: (id: string) => void;
+
   addSena: (s: Omit<Sena, 'id' | 'createdAt'>) => void;
   updateSena: (id: string, data: Partial<Sena>) => void;
   deleteSena: (id: string) => void;
@@ -131,7 +135,7 @@ export const useStore = create<AppStore>((set, get) => ({
   vehicles: [], expenses: [], clients: [], sales: [], installmentPayments: [],
   suppliers: [], fixedExpenseTypes: [], fixedExpenseRecords: [], tasks: [],
   transactions: [], transfers: [], leads: [], dailyCashes: [], cashMovements: [],
-  taxPayments: [], cheques: [], senas: [], usdOperations: [],
+  taxPayments: [], cheques: [], senas: [], usdOperations: [], capitalAssets: [],
   settings: { iibbRate: 3, province: 'Buenos Aires', businessName: 'Maja Automotores', cuit: '', currency: 'ARS' },
   initialized: false,
   loading: false,
@@ -164,6 +168,7 @@ export const useStore = create<AppStore>((set, get) => ({
         cheques: data.cheques ?? [],
         senas: data.senas ?? [],
         usdOperations: data.usdOperations ?? [],
+        capitalAssets: data.capitalAssets ?? [],
         settings: data.settings ?? get().settings,
         initialized: true,
         loading: false,
@@ -681,6 +686,31 @@ export const useStore = create<AppStore>((set, get) => ({
     sync(
       () => authFetch(`/api/usd/${id}`, { method: 'DELETE' }).then(() => {}),
       () => set({ usdOperations: prev })
+    );
+  },
+
+  addCapitalAsset: (a, payChequeIds = []) => {
+    const tempId = uid();
+    set((st) => ({ capitalAssets: [...st.capitalAssets, { ...a, id: tempId, createdAt: now() }] }));
+    sync(
+      () => authFetch('/api/capital-assets', { method: 'POST', body: JSON.stringify(a) })
+        .then((r) => r.json())
+        .then(({ capitalAsset }) => {
+          set((st) => ({ capitalAssets: st.capitalAssets.map((x) => x.id === tempId ? capitalAsset : x) }));
+          // Cheques de cartera entregados para pagar el bien → entregados + vinculados (no descuenta doble).
+          if (payChequeIds.length) {
+            for (const cid of payChequeIds) get().updateCheque(cid, { estado: 'entregado', purchaseAssetId: capitalAsset.id, entregadoA: a.description || 'Bien de capital' });
+          }
+        }),
+      () => set((st) => ({ capitalAssets: st.capitalAssets.filter((x) => x.id !== tempId) }))
+    );
+  },
+  deleteCapitalAsset: (id) => {
+    const prev = get().capitalAssets;
+    set((st) => ({ capitalAssets: st.capitalAssets.filter((a) => a.id !== id) }));
+    sync(
+      () => authFetch(`/api/capital-assets/${id}`, { method: 'DELETE' }).then(() => {}),
+      () => set({ capitalAssets: prev })
     );
   },
 

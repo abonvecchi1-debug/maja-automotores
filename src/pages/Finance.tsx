@@ -75,7 +75,7 @@ const sourceTag: Record<MovSource, string> = {
 };
 
 export function Finance() {
-  const { transactions, vehicles, sales, installmentPayments, cheques, expenses, fixedExpenseRecords, taxPayments, usdOperations, addTransaction, deleteTransaction, markTransactionPaid } = useStore();
+  const { transactions, vehicles, sales, installmentPayments, cheques, expenses, fixedExpenseRecords, taxPayments, usdOperations, capitalAssets, addTransaction, deleteTransaction, markTransactionPaid } = useStore();
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
@@ -209,6 +209,14 @@ export function Finance() {
   const comprasVehiculos = vehicles
     .filter((v) => v.acquiredAs !== 'parte_pago' && !(v.status === 'señado' && v.senaType === 'compra') && after(v.purchaseDate))
     .reduce((a, v) => a + Math.max(0, (v.purchasePrice ?? 0) - chequePagoAuto(v.id)), 0);
+  // Bienes de capital (trailer, etc.): igual que un auto → suman al Capital y descuentan del
+  // Disponible su parte en pesos (valor − cheques usados), solo los comprados post-ancla.
+  const chequePagoBien = (aid: string) => cheques
+    .filter((c) => c.moneda === 'ARS' && c.estado === 'entregado' && c.purchaseAssetId === aid)
+    .reduce((a, c) => a + c.monto, 0);
+  const comprasCapital = capitalAssets
+    .filter((x) => after(x.purchaseDate))
+    .reduce((a, x) => a + Math.max(0, (x.value ?? 0) - chequePagoBien(x.id)), 0);
   // Cheques recibidos en cartera/depositados/cobrados = plata a cobrar → suman al disponible.
   // Los entregados/endosados (usados para pagar) y los rechazados no cuentan.
   const chequesDisponibles = cheques
@@ -223,10 +231,11 @@ export function Finance() {
   const impuestosPaid = taxPayments.filter((t) => t.paid && after(t.paidDate)).reduce((a, t) => a + t.amount, 0);
 
   const disponible = openingBalance + saleLiquid + collectedInstallments + manualIncome + senaVentaActiva + chequesDisponibles
-    - manualPaidExpense - gastosVarPaid - gastosFijosPaid - impuestosPaid - senaCompra - comprasVehiculos;
+    - manualPaidExpense - gastosVarPaid - gastosFijosPaid - impuestosPaid - senaCompra - comprasVehiculos - comprasCapital;
 
-  // Capital = costo de todos los autos en stock (comprados o de canje). No es gasto: es inventario.
-  const capital = vehicles.filter((v) => v.status !== 'vendido').reduce((a, v) => a + (v.purchasePrice ?? 0), 0);
+  // Capital = costo de los autos en stock + los bienes de capital (trailer, etc.). No es gasto.
+  const capital = vehicles.filter((v) => v.status !== 'vendido').reduce((a, v) => a + (v.purchasePrice ?? 0), 0)
+    + capitalAssets.reduce((a, x) => a + (x.value ?? 0), 0);
 
   // Cheques a cobrar (pendientes) — ya están dentro del disponible; se muestran a la vista.
   const chequesEnCarteraEstados = ['en_cartera', 'depositado'];

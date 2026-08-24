@@ -106,7 +106,7 @@ const mapCheque = (r) => ({
   endosadoPor: r.endosado_por ?? '', dniEndosante: r.dni_endosante ?? '',
   librador: r.librador, cuitLibrador: r.cuit_librador, recibidoDe: r.recibido_de,
   entregadoA: r.entregado_a, estado: r.estado, observaciones: r.observaciones,
-  saleId: n(r.sale_id), purchaseVehicleId: n(r.purchase_vehicle_id), createdAt: r.created_at,
+  saleId: n(r.sale_id), purchaseVehicleId: n(r.purchase_vehicle_id), purchaseAssetId: n(r.purchase_asset_id), createdAt: r.created_at,
 });
 const mapSena = (r) => ({
   id: r.id, type: r.type, vehicleId: n(r.vehicle_id), clientId: n(r.client_id),
@@ -116,6 +116,10 @@ const mapSena = (r) => ({
 const mapUsd = (r) => ({
   id: r.id, type: r.type, amountUsd: r.amount_usd, rate: r.rate,
   amountPesos: r.amount_pesos, date: r.date, notes: r.notes ?? '', createdAt: r.created_at,
+});
+const mapCapitalAsset = (r) => ({
+  id: r.id, description: r.description, value: r.value, purchaseDate: r.purchase_date,
+  notes: r.notes ?? '', createdAt: r.created_at,
 });
 
 const SETTING_DEFAULTS = { iibbRate: 3, province: 'Buenos Aires', businessName: 'Maja Automotores', cuit: '', currency: 'ARS' };
@@ -154,6 +158,7 @@ router.get('/', (req, res) => {
     cheques:              db.prepare('SELECT * FROM cheques ORDER BY fecha_vencimiento ASC').all().map(mapCheque),
     senas:                db.prepare('SELECT * FROM senas ORDER BY created_at DESC').all().map(mapSena),
     usdOperations:        db.prepare('SELECT * FROM usd_operations ORDER BY date ASC, created_at ASC').all().map(mapUsd),
+    capitalAssets:        db.prepare('SELECT * FROM capital_assets ORDER BY purchase_date DESC, created_at DESC').all().map(mapCapitalAsset),
     settings:             getSettings(),
   });
 });

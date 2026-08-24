@@ -268,6 +268,15 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS capital_assets (
+    id TEXT PRIMARY KEY,
+    description TEXT NOT NULL DEFAULT '',
+    value REAL NOT NULL DEFAULT 0,       -- costo / valor (suma al Capital)
+    purchase_date TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS credit_campaigns (
     id TEXT PRIMARY KEY,
     titulo TEXT NOT NULL DEFAULT '',
@@ -330,6 +339,8 @@ try { db.exec(`ALTER TABLE cheques ADD COLUMN sale_id TEXT`); } catch {}
 // Vínculo de un cheque de cartera ENTREGADO para pagar la compra de un auto (para que
 // esa compra no descuente doble del Disponible: la pagó el cheque, no el efectivo).
 try { db.exec(`ALTER TABLE cheques ADD COLUMN purchase_vehicle_id TEXT`); } catch {}
+// Ídem para un bien de capital (trailer, herramientas, etc.).
+try { db.exec(`ALTER TABLE cheques ADD COLUMN purchase_asset_id TEXT`); } catch {}
 // Seña sobre el vehículo (reserva con depósito): venta = me lo señaron, compra = yo lo señé
 try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_amount REAL`); } catch {}
 try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_date TEXT`); } catch {}
@@ -364,7 +375,7 @@ export const SYNCABLE_TABLES = [
   'suppliers', 'expenses', 'tasks', 'transactions',
   'transfers', 'leads', 'contact_history', 'daily_cashes', 'cash_movements',
   'fixed_expense_types', 'fixed_expense_records', 'tax_payments',
-  'credit_campaigns', 'cheques', 'senas', 'usd_operations',
+  'credit_campaigns', 'cheques', 'senas', 'usd_operations', 'capital_assets',
 ];
 
 // Add updated_at column and auto-update triggers to every sync table
