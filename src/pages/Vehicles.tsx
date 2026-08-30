@@ -89,6 +89,7 @@ export function Vehicles() {
   const [brandFilter, setBrandFilter] = useState('');
   const [kmMin, setKmMin] = useState('');
   const [kmMax, setKmMax] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
   const [formError, setFormError] = useState('');
@@ -104,6 +105,13 @@ export function Vehicles() {
     ...uniqueBrands.map((b) => ({ value: b, label: b })),
   ];
 
+  // Meses para el filtro de vendidos (últimos 12).
+  const saleMonths = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(); d.setMonth(d.getMonth() - i);
+    const val = d.toISOString().slice(0, 7);
+    return { value: val, label: d.toLocaleString('es-AR', { month: 'long', year: 'numeric' }) };
+  });
+
   const filtered = vehicles.filter((v) => {
     const matchSearch = search === '' ||
       `${v.brand} ${v.model} ${v.year} ${v.patent}`.toLowerCase().includes(search.toLowerCase());
@@ -111,7 +119,9 @@ export function Vehicles() {
     const matchBrand = brandFilter === '' || v.brand === brandFilter;
     const matchKmMin = kmMin === '' || v.km >= Number(kmMin);
     const matchKmMax = kmMax === '' || v.km <= Number(kmMax);
-    return matchSearch && matchStatus && matchBrand && matchKmMin && matchKmMax;
+    // El filtro por mes aplica solo a los vendidos (por fecha de venta).
+    const matchMonth = statusFilter !== 'vendido' || monthFilter === '' || (v.soldDate ?? '').startsWith(monthFilter);
+    return matchSearch && matchStatus && matchBrand && matchKmMin && matchKmMax && matchMonth;
   });
 
   // Cuando se ven los VENDIDOS, se ordenan por fecha de venta (la más reciente arriba).
@@ -260,7 +270,29 @@ export function Vehicles() {
             className="w-24 px-2 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-brand-600"
           />
         </div>
+        {statusFilter === 'vendido' && (
+          <select
+            value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}
+            className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-brand-600 text-slate-700"
+          >
+            <option value="">Todos los meses</option>
+            {saleMonths.map((m) => <option key={m.value} value={m.value} className="capitalize">{m.label}</option>)}
+          </select>
+        )}
       </div>
+
+      {/* Resumen de ventas del período filtrado */}
+      {statusFilter === 'vendido' && (() => {
+        const facturado = visible.reduce((a, v) => a + (v.soldPrice ?? 0), 0);
+        const ganancia = visible.reduce((a, v) => a + ((v.soldPrice ?? 0) - v.purchasePrice - vehicleCost(v.id)), 0);
+        return (
+          <div className="flex flex-wrap gap-3 text-sm">
+            <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700"><b>{visible.length}</b> vendido{visible.length !== 1 ? 's' : ''}{monthFilter ? ' este mes' : ''}</span>
+            <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700">Facturado: <b>{formatCurrency(facturado)}</b></span>
+            <span className={`px-3 py-1.5 rounded-lg ${ganancia >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>Ganancia: <b>{formatCurrency(ganancia)}</b></span>
+          </div>
+        );
+      })()}
 
       {/* Summary pills */}
       <div className="flex gap-2 flex-wrap">
