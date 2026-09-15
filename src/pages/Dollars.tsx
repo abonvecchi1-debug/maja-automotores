@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { DollarSign, TrendingUp, Plus, Trash2, ArrowDownCircle, ArrowUpCircle, Wallet } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { DollarSign, TrendingUp, Plus, Trash2, ArrowDownCircle, ArrowUpCircle, Wallet, RefreshCw } from 'lucide-react';
 import { useStore } from '../store';
 import type { UsdOperation, UsdOperationType } from '../types';
 import { Button } from '../components/ui/Button';
@@ -45,12 +45,29 @@ const emptyForm = {
   notes: '',
 };
 
+type Blue = { compra: number; venta: number; fecha: string; fuente: string };
+
 export function Dollars() {
   const { usdOperations, addUsdOperation, deleteUsdOperation } = useStore();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [blue, setBlue] = useState<Blue | null>(null);
+  const [blueLoading, setBlueLoading] = useState(false);
+
+  const loadBlue = () => {
+    setBlueLoading(true);
+    fetch('/api/dolar/blue')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && d.venta) setBlue(d); })
+      .catch(() => {})
+      .finally(() => setBlueLoading(false));
+  };
+  useEffect(() => { loadBlue(); }, []);
 
   const { holdings, avgCost, costPool, realized, rows } = computeUsd(usdOperations);
+  // Valor de la tenencia al blue de hoy (a la venta) y ganancia todavía no realizada.
+  const valorHoy = blue ? holdings * blue.venta : 0;
+  const gananciaNoRealizada = blue ? valorHoy - costPool : 0;
 
   const total = form.amountUsd * form.rate;
   const sellProfit = form.type === 'venta' ? form.amountUsd * (form.rate - avgCost) : 0;
@@ -101,6 +118,37 @@ export function Dollars() {
           <Button onClick={() => openModal('venta')}><ArrowUpCircle size={16} /> Vender</Button>
         </div>
       </div>
+
+      {/* Dólar blue hoy (en vivo) */}
+      <Card className="bg-slate-900 text-white">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-white/10 rounded-xl"><DollarSign size={22} className="text-emerald-300" /></div>
+            <div>
+              <p className="text-xs text-slate-300 font-medium">Dólar blue hoy {blue && <span className="text-slate-400">· {blue.fuente}</span>}</p>
+              {blue ? (
+                <p className="text-lg font-bold">Compra <span className="text-emerald-300">${blue.compra.toLocaleString('es-AR')}</span> <span className="text-slate-500">·</span> Venta <span className="text-emerald-300">${blue.venta.toLocaleString('es-AR')}</span></p>
+              ) : (
+                <p className="text-sm text-slate-300">{blueLoading ? 'Cargando cotización…' : 'Sin conexión — no se pudo traer la cotización'}</p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            {blue && holdings > 0 && (
+              <div className="text-right">
+                <p className="text-xs text-slate-300">Tu tenencia hoy vale (a la venta)</p>
+                <p className="text-lg font-bold">{formatCurrency(valorHoy)}</p>
+                <p className={`text-[11px] ${gananciaNoRealizada >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {gananciaNoRealizada >= 0 ? 'ganancia' : 'pérdida'} sin vender: {formatCurrency(gananciaNoRealizada)}
+                </p>
+              </div>
+            )}
+            <button onClick={loadBlue} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Actualizar cotización">
+              <RefreshCw size={16} className={blueLoading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+        </div>
+      </Card>
 
       {/* Resumen */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -217,6 +265,19 @@ export function Dollars() {
             <Input label="Cantidad de dólares (US$)" type="number" value={form.amountUsd || ''} onChange={(e) => setForm((f) => ({ ...f, amountUsd: +e.target.value }))} placeholder="1000" />
             <Input label="Cotización ($ por dólar)" type="number" value={form.rate || ''} onChange={(e) => setForm((f) => ({ ...f, rate: +e.target.value }))} placeholder="1200" />
           </div>
+          {blue && (() => {
+            // Comprando dólares pagás la "venta" del blue; vendiendo cobrás la "compra".
+            const sugerido = form.type === 'compra' ? blue.venta : blue.compra;
+            return (
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, rate: sugerido }))}
+                className="text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg px-3 py-2 transition-colors"
+              >
+                Usar blue de hoy: <b>${sugerido.toLocaleString('es-AR')}</b> ({form.type === 'compra' ? 'venta' : 'compra'})
+              </button>
+            );
+          })()}
           <Input label="Fecha" type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
           <Input label="Nota (opcional)" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Ej: le compré a Fulano" />
 
