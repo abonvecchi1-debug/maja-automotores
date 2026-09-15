@@ -11,6 +11,7 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { confirmDialog, notify } from '../components/ui/Feedback';
 import { formatCurrency, formatDate, getCurrentMonth, formatMonthLabel } from '../utils/formatters';
+import { usdRealizedProfits } from '../utils/finance';
 
 const INCOME_CATEGORIES = [
   { value: 'venta_contado', label: 'Venta al contado' },
@@ -43,6 +44,8 @@ const categoryLabel: Record<string, string> = {
   venta_vehiculo: 'Venta de vehículo',
   ganancia_venta: 'Ganancia de venta',
   perdida_venta: 'Pérdida de venta',
+  ganancia_dolares: 'Ganancia dólares',
+  perdida_dolares: 'Pérdida dólares',
   cuota: 'Cuota',
   seña: 'Seña',
   otro_ingreso: 'Otro ingreso',
@@ -55,7 +58,7 @@ const categoryLabel: Record<string, string> = {
 };
 
 /** Movimiento unificado de todas las fuentes de dinero (igual criterio que Reportes). */
-type MovSource = 'venta' | 'costo' | 'tx' | 'gasto' | 'fijo' | 'impuesto';
+type MovSource = 'venta' | 'costo' | 'tx' | 'gasto' | 'fijo' | 'impuesto' | 'dolares';
 type Movement = {
   key: string;
   source: MovSource;
@@ -71,7 +74,7 @@ type Movement = {
 };
 
 const sourceTag: Record<MovSource, string> = {
-  venta: 'Venta', costo: 'Costo auto', tx: 'Finanzas', gasto: 'Gasto', fijo: 'Gasto fijo', impuesto: 'Impuesto',
+  venta: 'Venta', costo: 'Costo auto', tx: 'Finanzas', gasto: 'Gasto', fijo: 'Gasto fijo', impuesto: 'Impuesto', dolares: 'Dólares',
 };
 
 export function Finance() {
@@ -133,6 +136,17 @@ export function Finance() {
     movements.push({
       key: `imp-${t.id}`, source: 'impuesto', type: 'egreso', category: 'impuesto',
       description: t.description, amount: t.amount, date: t.paidDate!, paid: true, paidDate: t.paidDate,
+    });
+  }
+  // Ganancia (o pérdida) por venta de dólares, imputada al mes de cada venta.
+  for (const p of usdRealizedProfits(usdOperations)) {
+    if (Math.abs(p.profit) < 0.5) continue;
+    movements.push({
+      key: `usd-${p.id}`, source: 'dolares',
+      type: p.profit >= 0 ? 'ingreso' : 'egreso',
+      category: p.profit >= 0 ? 'ganancia_dolares' : 'perdida_dolares',
+      description: p.profit >= 0 ? 'Ganancia por venta de dólares' : 'Pérdida por venta de dólares',
+      amount: Math.abs(p.profit), date: p.date, paid: true,
     });
   }
 

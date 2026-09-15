@@ -5,12 +5,18 @@ import { useStore } from '../store';
 import { StatCard, Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { formatCurrency, formatCurrencyShort, formatDate, statusLabel, statusColor } from '../utils/formatters';
+import { usdRealizedProfits } from '../utils/finance';
 
 export function Dashboard() {
   const {
     vehicles, clients, sales, installmentPayments,
-    expenses, fixedExpenseRecords, tasks, suppliers, settings, transactions, taxPayments, cheques,
+    expenses, fixedExpenseRecords, tasks, suppliers, settings, transactions, taxPayments, cheques, usdOperations,
   } = useStore();
+
+  // Ganancia/pérdida realizada de dólares por venta (mismo cálculo que Finanzas y el apartado Dólares).
+  const usdProfits = usdRealizedProfits(usdOperations);
+  const usdGanancia = (month: string) => usdProfits.filter((p) => (p.date || '').startsWith(month) && p.profit >= 0).reduce((a, p) => a + p.profit, 0);
+  const usdPerdida = (month: string) => usdProfits.filter((p) => (p.date || '').startsWith(month) && p.profit < 0).reduce((a, p) => a - p.profit, 0);
 
   const today = new Date().toISOString().split('T')[0];
   const thisMonth = today.slice(0, 7);
@@ -27,13 +33,14 @@ export function Dashboard() {
   const monthRevenue = soldThisMonth.reduce((acc, v) => acc + Math.max(0, (v.soldPrice ?? 0) - v.purchasePrice), 0)
     + transactions
         .filter((t) => t.type === 'ingreso' && t.category !== 'saldo_inicial' && t.date.startsWith(thisMonth))
-        .reduce((acc, t) => acc + t.amount, 0);
+        .reduce((acc, t) => acc + t.amount, 0)
+    + usdGanancia(thisMonth);  // ganancia por venta de dólares
 
   const monthExpenses = expenses
     .filter((e) => e.date.startsWith(thisMonth))
     .reduce((acc, e) => acc + e.amount, 0)
     + fixedExpenseRecords
-        .filter((r) => r.month === thisMonth)
+        .filter((r) => (r.dueDate || `${r.month}-01`).startsWith(thisMonth))  // mismo criterio que Finanzas
         .reduce((acc, r) => acc + r.amount, 0)
     + transactions
         .filter((t) => t.type === 'egreso' && t.paid !== false && t.date.startsWith(thisMonth))
@@ -42,7 +49,8 @@ export function Dashboard() {
         .filter((t) => t.paid && t.paidDate?.startsWith(thisMonth))
         .reduce((acc, t) => acc + t.amount, 0)
     // Solo cuenta como egreso si se vendió a pérdida (costo mayor al precio).
-    + soldThisMonth.reduce((acc, v) => acc + Math.max(0, v.purchasePrice - (v.soldPrice ?? 0)), 0);
+    + soldThisMonth.reduce((acc, v) => acc + Math.max(0, v.purchasePrice - (v.soldPrice ?? 0)), 0)
+    + usdPerdida(thisMonth);  // pérdida por venta de dólares
 
   const monthIIBB = (soldThisMonth.reduce((acc, v) => acc + (v.soldPrice ?? 0), 0)) * (settings.iibbRate / 100);
   const monthProfit = monthRevenue - monthExpenses;
@@ -80,12 +88,13 @@ export function Dashboard() {
     const monthLabel = d.toLocaleString('es-AR', { month: 'short' });
     const ingresos = vehicles
       .filter((v) => v.status === 'vendido' && v.soldDate?.startsWith(m))
-      .reduce((acc, v) => acc + Math.max(0, (v.soldPrice ?? 0) - v.purchasePrice), 0);
+      .reduce((acc, v) => acc + Math.max(0, (v.soldPrice ?? 0) - v.purchasePrice), 0)
+      + usdGanancia(m);
     const gastos = expenses
       .filter((e) => e.date.startsWith(m))
       .reduce((acc, e) => acc + e.amount, 0)
       + fixedExpenseRecords
-          .filter((r) => r.month === m)
+          .filter((r) => (r.dueDate || `${r.month}-01`).startsWith(m))
           .reduce((acc, r) => acc + r.amount, 0)
       + transactions
           .filter((t) => t.type === 'egreso' && t.paid !== false && t.date.startsWith(m))
@@ -95,7 +104,8 @@ export function Dashboard() {
           .reduce((acc, t) => acc + t.amount, 0)
       + vehicles
           .filter((v) => v.status === 'vendido' && v.soldDate?.startsWith(m))
-          .reduce((acc, v) => acc + Math.max(0, v.purchasePrice - (v.soldPrice ?? 0)), 0);
+          .reduce((acc, v) => acc + Math.max(0, v.purchasePrice - (v.soldPrice ?? 0)), 0)
+      + usdPerdida(m);
     const ingresosTx = transactions
       .filter((t) => t.type === 'ingreso' && t.category !== 'saldo_inicial' && t.date.startsWith(m))
       .reduce((acc, t) => acc + t.amount, 0);
