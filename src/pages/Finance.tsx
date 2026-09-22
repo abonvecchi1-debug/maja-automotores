@@ -37,7 +37,16 @@ const INITIAL_FORM = {
   date: new Date().toISOString().split('T')[0],
   notes: '',
   paid: true,
+  method: 'efectivo' as 'efectivo' | 'cheque' | 'dolares', // medio de pago (solo egresos)
+  payee: '',      // a quién le pagué (opcional)
+  usdAmount: 0,   // dólares usados si method === 'dolares'
 };
+
+const PAYMENT_METHODS = [
+  { value: 'efectivo', label: 'Efectivo / banco' },
+  { value: 'cheque', label: 'Cheque de cartera' },
+  { value: 'dolares', label: 'Dólares' },
+] as const;
 
 const categoryLabel: Record<string, string> = {
   venta_contado: 'Venta contado',
@@ -71,6 +80,8 @@ type Movement = {
   paidDate?: string;
   txId?: string;        // id de la transacción manual (para pagar / eliminar)
   vehicleId?: string;   // id del vehículo (ventas / costo)
+  payee?: string;       // a quién se le pagó (egresos manuales)
+  method?: 'efectivo' | 'cheque' | 'dolares'; // medio de pago (egresos manuales)
 };
 
 const sourceTag: Record<MovSource, string> = {
@@ -78,10 +89,11 @@ const sourceTag: Record<MovSource, string> = {
 };
 
 export function Finance() {
-  const { transactions, vehicles, sales, installmentPayments, cheques, expenses, fixedExpenseRecords, taxPayments, usdOperations, capitalAssets, addTransaction, deleteTransaction, markTransactionPaid } = useStore();
+  const { transactions, vehicles, sales, installmentPayments, cheques, expenses, fixedExpenseRecords, taxPayments, usdOperations, capitalAssets, addTransaction, addExpenseWithPayment, deleteExpenseTransaction, markTransactionPaid } = useStore();
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
+  const [payChequeIds, setPayChequeIds] = useState<string[]>([]);
   const [monthFilter, setMonthFilter] = useState(getCurrentMonth());
   const [onlyPending, setOnlyPending] = useState(false);
 
@@ -115,6 +127,7 @@ export function Finance() {
     movements.push({
       key: `tx-${t.id}`, source: 'tx', type: t.type, category: t.category, description: t.description,
       amount: t.amount, date: t.date, paid: t.type === 'ingreso' ? true : (t.paid ?? true), paidDate: t.paidDate, txId: t.id,
+      payee: t.payee, method: t.paymentMethod,
     });
   }
   // Gastos variables (gastos de vehículos / proveedores)
@@ -239,7 +252,20 @@ export function Finance() {
   // Los egresos cuentan post-ancla por su FECHA DE PAGO (cuándo salió la plata), no por
   // fecha nominal/vencimiento: un gasto con vencimiento futuro pero ya pagado antes del
   // saldo inicial ya está descontado del efectivo → no se resta de nuevo.
-  const manualPaidExpense = transactions.filter((t) => t.type === 'egreso' && t.paid !== false && after(t.paidDate ?? t.date)).reduce((a, t) => a + t.amount, 0);
+  // Cheques de cartera entregados para pagar un gasto puntual (no descuenta doble el gasto).
+  const chequePagoTx = (txId: string) => cheques
+    .filter((c) => c.moneda === 'ARS' && c.estado === 'entregado' && c.purchaseTransactionId === txId)
+    .reduce((a, c) => a + c.monto, 0);
+  const manualPaidExpense = transactions
+    .filter((t) => t.type === 'egreso' && t.paid !== false && after(t.paidDate ?? t.date))
+    .reduce((a, t) => {
+      // Pagado con dólares: lo pagó la tenencia de dólares (que ya bajó), no el efectivo → no resta.
+      if (t.paymentMethod === 'dolares') return a;
+      // Pagado con cheque de cartera: el cheque ya salió del disponible al pasar a "entregado";
+      // solo resta la parte que se pagó en efectivo (si el cheque no cubrió todo).
+      if (t.paymentMethod === 'cheque') return a + Math.max(0, t.amount - chequePagoTx(t.id));
+      return a + t.amount;
+    }, 0);
   const gastosVarPaid = expenses.filter((e) => e.paid && after(e.paidDate ?? e.date)).reduce((a, e) => a + e.amount, 0);
   const gastosFijosPaid = fixedExpenseRecords.filter((r) => r.paid && after(r.paidDate ?? (r.dueDate || `${r.month}-01`))).reduce((a, r) => a + r.amount, 0);
   const impuestosPaid = taxPayments.filter((t) => t.paid && after(t.paidDate)).reduce((a, t) => a + t.amount, 0);
@@ -263,10 +289,56 @@ export function Finance() {
     else { const avg = usdHoldings > 0 ? usdPool / usdHoldings : 0; usdPool -= o.amountUsd * avg; usdHoldings -= o.amountUsd; }
   }
   usdHoldings = Math.max(0, usdHoldings); usdPool = Math.max(0, usdPool);
+  const usdAvgCost = usdHoldings > 0.0001 ? usdPool / usdHoldings : 0;
   const fmtUSD = (n: number) => 'U$S ' + n.toLocaleString('es-AR', { maximumFractionDigits: 0 });
+
+  // Cheques ARS en cartera disponibles para pagar un gasto.
+  const carteraCheques = cheques.filter((c) => c.moneda === 'ARS' && c.estado === 'en_cartera');
+  const usdExpensePesos = Math.round((form.usdAmount || 0) * usdAvgCost); // valor del gasto en pesos al promedio
+
+  const closeModal = () => { setShowModal(false); setForm(INITIAL_FORM); setPayChequeIds([]); };
 
   const handleSave = () => {
     if (!form.description.trim()) { notify('Poné una descripción del movimiento.', 'error'); return; }
+    const isEgreso = form.type === 'egreso';
+    const payee = form.payee.trim();
+
+    // ── Egreso pagado con DÓLARES ────────────────────────────────────────────
+    if (isEgreso && form.method === 'dolares') {
+      if (!form.usdAmount || form.usdAmount <= 0) { notify('Poné cuántos dólares usaste.', 'error'); return; }
+      if (form.usdAmount > usdHoldings + 0.0001) { notify(`No te alcanza: solo tenés ${fmtUSD(usdHoldings)} en tenencia.`, 'error'); return; }
+      if (usdAvgCost <= 0) { notify('No tenés dólares cargados para pagar con dólares.', 'error'); return; }
+      addExpenseWithPayment(
+        {
+          type: 'egreso', category: form.category, amount: usdExpensePesos,
+          description: form.description, date: form.date, paid: true,
+          paymentMethod: 'dolares', payee, usdAmount: form.usdAmount, usdRate: usdAvgCost,
+          vehicleId: undefined, clientId: undefined, supplierId: undefined,
+        },
+        { usd: { amountUsd: form.usdAmount, rate: usdAvgCost } },
+      );
+      closeModal();
+      return;
+    }
+
+    // ── Egreso pagado con CHEQUE de cartera ──────────────────────────────────
+    if (isEgreso && form.method === 'cheque') {
+      if (!form.amount || form.amount <= 0) { notify('El monto tiene que ser mayor a 0.', 'error'); return; }
+      if (!payChequeIds.length) { notify('Elegí al menos un cheque de la cartera.', 'error'); return; }
+      addExpenseWithPayment(
+        {
+          type: 'egreso', category: form.category, amount: form.amount,
+          description: form.description, date: form.date, paid: true,
+          paymentMethod: 'cheque', payee,
+          vehicleId: undefined, clientId: undefined, supplierId: undefined,
+        },
+        { payChequeIds, entregadoA: payee || form.description },
+      );
+      closeModal();
+      return;
+    }
+
+    // ── Ingreso o egreso en EFECTIVO ─────────────────────────────────────────
     if (!form.amount || form.amount <= 0) { notify('El monto tiene que ser mayor a 0.', 'error'); return; }
     addTransaction({
       type: form.type,
@@ -274,13 +346,14 @@ export function Finance() {
       amount: form.amount,
       description: form.description,
       date: form.date,
-      paid: form.type === 'egreso' ? form.paid : true,
+      paid: isEgreso ? form.paid : true,
+      paymentMethod: isEgreso ? 'efectivo' : undefined,
+      payee: isEgreso ? payee : undefined,
       vehicleId: undefined,
       clientId: undefined,
       supplierId: undefined,
     });
-    setShowModal(false);
-    setForm(INITIAL_FORM);
+    closeModal();
   };
 
   return (
@@ -458,6 +531,9 @@ export function Finance() {
                     </p>
                     <p className="text-xs text-slate-500">
                       {formatDate(m.date)}
+                      {m.method === 'cheque' && <span className="text-slate-500"> · con cheque</span>}
+                      {m.method === 'dolares' && <span className="text-emerald-600"> · en dólares</span>}
+                      {m.payee && <span className="text-slate-500"> · a {m.payee}</span>}
                       {m.type === 'egreso' && (
                         m.paid
                           ? <span className="text-green-600"> · Pagado{m.paidDate ? ` el ${formatDate(m.paidDate)}` : ''}</span>
@@ -490,7 +566,7 @@ export function Finance() {
                   </span>
 
                   {m.source === 'tx' ? (
-                    <button onClick={() => confirmDialog({ title: 'Eliminar movimiento', message: `¿Eliminar "${m.description}"?`, confirmLabel: 'Eliminar', danger: true }).then((ok) => ok && deleteTransaction(m.txId!))} className="text-slate-300 hover:text-red-500 transition-colors flex-shrink-0" title="Eliminar">
+                    <button onClick={() => confirmDialog({ title: 'Eliminar movimiento', message: `¿Eliminar "${m.description}"?${m.method === 'cheque' ? ' El cheque vuelve a la cartera.' : m.method === 'dolares' ? ' Los dólares vuelven a tu tenencia.' : ''}`, confirmLabel: 'Eliminar', danger: true }).then((ok) => ok && deleteExpenseTransaction(m.txId!))} className="text-slate-300 hover:text-red-500 transition-colors flex-shrink-0" title="Eliminar">
                       <Trash2 size={14} />
                     </button>
                   ) : m.vehicleId ? (
@@ -518,11 +594,11 @@ export function Finance() {
       {/* Modal */}
       <Modal
         isOpen={showModal}
-        onClose={() => { setShowModal(false); setForm(INITIAL_FORM); }}
+        onClose={closeModal}
         title="Nuevo movimiento"
         footer={
           <>
-            <Button variant="outline" onClick={() => { setShowModal(false); setForm(INITIAL_FORM); }}>Cancelar</Button>
+            <Button variant="outline" onClick={closeModal}>Cancelar</Button>
             <Button onClick={handleSave}>Guardar</Button>
           </>
         }
@@ -532,7 +608,7 @@ export function Finance() {
             {(['ingreso', 'egreso'] as const).map((t) => (
               <button
                 key={t}
-                onClick={() => setForm((f) => ({ ...f, type: t, category: t === 'ingreso' ? 'venta_contado' : 'compra_vehiculo', paid: t === 'ingreso' }))}
+                onClick={() => { setForm((f) => ({ ...f, type: t, category: t === 'ingreso' ? 'venta_contado' : 'compra_vehiculo', paid: t === 'ingreso', method: 'efectivo', usdAmount: 0 })); setPayChequeIds([]); }}
                 className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors border-2 ${
                   form.type === t
                     ? t === 'ingreso' ? 'bg-green-50 border-green-400 text-green-800' : 'bg-red-50 border-red-400 text-red-800'
@@ -553,17 +629,94 @@ export function Finance() {
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
             placeholder="Ej: Venta Toyota Corolla"
           />
+          {/* Medio de pago (solo egresos) */}
+          {form.type === 'egreso' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Medio de pago</label>
+              <div className="grid grid-cols-3 gap-2">
+                {PAYMENT_METHODS.map((pm) => (
+                  <button
+                    key={pm.value}
+                    onClick={() => { setForm((f) => ({ ...f, method: pm.value })); if (pm.value !== 'cheque') setPayChequeIds([]); }}
+                    className={`py-2 rounded-xl text-xs font-medium transition-colors border-2 ${
+                      form.method === pm.value ? 'bg-brand-50 border-brand-400 text-brand-800' : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {pm.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Monto (efectivo/cheque) o Dólares usados */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Monto ($)" type="number" value={form.amount}
-              onChange={(e) => setForm((f) => ({ ...f, amount: +e.target.value }))}
-            />
+            {form.type === 'egreso' && form.method === 'dolares' ? (
+              <div>
+                <Input
+                  label="Dólares usados (U$S)" type="number" value={form.usdAmount}
+                  onChange={(e) => setForm((f) => ({ ...f, usdAmount: +e.target.value }))}
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  = <b>{formatCurrency(usdExpensePesos)}</b> al promedio ({fmtUSD(usdHoldings)} disponibles)
+                </p>
+              </div>
+            ) : (
+              <Input
+                label="Monto ($)" type="number" value={form.amount}
+                onChange={(e) => setForm((f) => ({ ...f, amount: +e.target.value }))}
+              />
+            )}
             <Input
               label="Fecha" type="date" value={form.date}
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
             />
           </div>
+
+          {/* A quién le pagué (opcional) */}
           {form.type === 'egreso' && (
+            <Input
+              label="A quién le pagué (opcional)" value={form.payee}
+              onChange={(e) => setForm((f) => ({ ...f, payee: e.target.value }))}
+              placeholder="Ej: Taller Pérez, Juan, AFIP…"
+            />
+          )}
+
+          {/* Cheques de cartera a entregar */}
+          {form.type === 'egreso' && form.method === 'cheque' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Cheques de cartera a entregar</label>
+              {carteraCheques.length === 0 ? (
+                <p className="text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+                  No tenés cheques en cartera. Cargalos en el apartado Cheques.
+                </p>
+              ) : (
+                <div className="space-y-1.5 max-h-44 overflow-y-auto">
+                  {carteraCheques.map((c) => {
+                    const checked = payChequeIds.includes(c.id);
+                    return (
+                      <label key={c.id} className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg border cursor-pointer ${checked ? 'border-brand-400 bg-brand-50' : 'border-slate-200'}`}>
+                        <input
+                          type="checkbox" checked={checked}
+                          onChange={(e) => setPayChequeIds((ids) => e.target.checked ? [...ids, c.id] : ids.filter((x) => x !== c.id))}
+                        />
+                        <span className="flex-1 min-w-0 truncate">{c.banco || 'Cheque'} N°{c.numero || '—'} · {c.librador || c.recibidoDe || 's/librador'}</span>
+                        <span className="font-semibold flex-shrink-0">{formatCurrency(c.monto)}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              {payChequeIds.length > 0 && (
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  Entregás {payChequeIds.length} cheque{payChequeIds.length !== 1 ? 's' : ''} por <b>{formatCurrency(carteraCheques.filter((c) => payChequeIds.includes(c.id)).reduce((a, c) => a + c.monto, 0))}</b>
+                  {form.amount > 0 && <> · gasto: {formatCurrency(form.amount)}</>}
+                </p>
+              )}
+            </div>
+          )}
+
+          {form.type === 'egreso' && form.method === 'efectivo' && (
             <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
               <input
                 type="checkbox"

@@ -12,6 +12,11 @@ const map = (r) => ({
   vehicleId: r.vehicle_id ?? undefined, clientId: r.client_id ?? undefined,
   supplierId: r.supplier_id ?? undefined,
   paid: r.paid === 1, paidDate: r.paid_date ?? undefined,
+  paymentMethod: r.payment_method ?? 'efectivo',
+  payee: r.payee ?? '',
+  usdAmount: r.usd_amount ?? undefined,
+  usdRate: r.usd_rate ?? undefined,
+  usdOperationId: r.usd_operation_id ?? undefined,
   createdAt: r.created_at,
 });
 
@@ -25,9 +30,11 @@ router.post('/', (req, res) => {
   // Los ingresos se consideran cobrados siempre. Los egresos pueden quedar pendientes.
   const paid = t.type === 'egreso' ? (t.paid ? 1 : 0) : 1;
   const paidDate = paid ? (t.paidDate ?? t.date) : null;
-  db.prepare('INSERT INTO transactions (id,type,category,amount,description,date,vehicle_id,client_id,supplier_id,paid,paid_date,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+  db.prepare('INSERT INTO transactions (id,type,category,amount,description,date,vehicle_id,client_id,supplier_id,paid,paid_date,payment_method,payee,usd_amount,usd_rate,usd_operation_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(id, t.type, t.category ?? '', t.amount, t.description, t.date,
-      t.vehicleId ?? null, t.clientId ?? null, t.supplierId ?? null, paid, paidDate, new Date().toISOString());
+      t.vehicleId ?? null, t.clientId ?? null, t.supplierId ?? null, paid, paidDate,
+      t.paymentMethod ?? 'efectivo', t.payee ?? '', t.usdAmount ?? null, t.usdRate ?? null, t.usdOperationId ?? null,
+      new Date().toISOString());
   res.status(201).json({ transaction: map(db.prepare('SELECT * FROM transactions WHERE id = ?').get(id)) });
 });
 

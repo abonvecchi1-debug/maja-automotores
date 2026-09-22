@@ -236,6 +236,11 @@ export interface Transaction {
   supplierId?: string;
   paid?: boolean;        // solo relevante para egresos (pagado / pendiente)
   paidDate?: string;
+  paymentMethod?: 'efectivo' | 'cheque' | 'dolares'; // con qué se pagó el egreso
+  payee?: string;        // a quién le pagué (opcional)
+  usdAmount?: number;    // dólares usados si se pagó con dólares
+  usdRate?: number;      // cotización usada (promedio de la tenencia)
+  usdOperationId?: string; // operación de dólares (salida) vinculada a este pago
   createdAt: string;
 }
 
@@ -367,6 +372,7 @@ export interface Cheque {
   saleId?: string;        // si el cheque vino de una venta
   purchaseVehicleId?: string; // si se entregó de cartera para pagar la compra de un auto
   purchaseAssetId?: string;   // si se entregó de cartera para pagar un bien de capital
+  purchaseTransactionId?: string; // si se entregó de cartera para pagar un gasto
   createdAt: string;
 }
 

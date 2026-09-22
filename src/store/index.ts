@@ -75,6 +75,13 @@ interface AppStore {
   addTransaction: (t: Omit<Transaction, 'id' | 'createdAt'>) => void;
   markTransactionPaid: (id: string, paid?: boolean) => void;
   deleteTransaction: (id: string) => void;
+  // Egreso pagado con cheque de cartera o con dólares de la tenencia.
+  // usd: crea la salida de dólares (al promedio) y la vincula al gasto.
+  addExpenseWithPayment: (
+    t: Omit<Transaction, 'id' | 'createdAt'>,
+    opts: { payChequeIds?: string[]; entregadoA?: string; usd?: { amountUsd: number; rate: number } },
+  ) => void;
+  deleteExpenseTransaction: (id: string) => void;
 
   updateSettings: (s: Partial<AppSettings>) => void;
 
@@ -518,6 +525,64 @@ export const useStore = create<AppStore>((set, get) => ({
       () => authFetch(`/api/transactions/${id}`, { method: 'DELETE' }).then(() => {}),
       () => set({ transactions: prev })
     );
+  },
+  addExpenseWithPayment: (t, opts) => {
+    const txTemp = uid();
+    if (opts.usd && opts.usd.amountUsd > 0) {
+      // Pagar con dólares = sacar dólares de la tenencia AL PROMEDIO (venta a la cotización
+      // promedio → ganancia 0, es una salida al costo). El gasto en pesos ya vale usd*promedio
+      // y NO toca el Disponible en pesos (lo pagaron los dólares). Se encadenan: primero la
+      // operación de dólares (para tener su id real) y luego la transacción vinculada.
+      const usdTemp = uid();
+      const usdBody = {
+        type: 'venta' as const, amountUsd: opts.usd.amountUsd, rate: opts.usd.rate,
+        amountPesos: opts.usd.amountUsd * opts.usd.rate, date: t.date, notes: `Pago: ${t.description}`.trim(),
+      };
+      set((s) => ({
+        usdOperations: [...s.usdOperations, { ...usdBody, id: usdTemp, createdAt: now() }],
+        transactions: [...s.transactions, { ...t, id: txTemp, usdOperationId: usdTemp, createdAt: now() }],
+      }));
+      sync(
+        () => authFetch('/api/usd', { method: 'POST', body: JSON.stringify(usdBody) })
+          .then((r) => r.json())
+          .then(({ usdOperation }) => {
+            set((s) => ({ usdOperations: s.usdOperations.map((x) => x.id === usdTemp ? usdOperation : x) }));
+            return authFetch('/api/transactions', { method: 'POST', body: JSON.stringify({ ...t, usdOperationId: usdOperation.id }) })
+              .then((r) => r.json())
+              .then(({ transaction }) => set((s) => ({ transactions: s.transactions.map((x) => x.id === txTemp ? transaction : x) })));
+          }),
+        () => set((s) => ({
+          usdOperations: s.usdOperations.filter((x) => x.id !== usdTemp),
+          transactions: s.transactions.filter((x) => x.id !== txTemp),
+        })),
+      );
+      return;
+    }
+    // Efectivo o cheque de cartera. Con cheque: la transacción se crea primero para vincular
+    // los cheques entregados a su id (así el gasto no descuenta doble del Disponible).
+    set((s) => ({ transactions: [...s.transactions, { ...t, id: txTemp, createdAt: now() }] }));
+    sync(
+      () => authFetch('/api/transactions', { method: 'POST', body: JSON.stringify(t) })
+        .then((r) => r.json())
+        .then(({ transaction }) => {
+          set((s) => ({ transactions: s.transactions.map((x) => x.id === txTemp ? transaction : x) }));
+          if (opts.payChequeIds?.length) {
+            const entregadoA = opts.entregadoA || t.payee || t.description || 'Gasto';
+            for (const cid of opts.payChequeIds) get().updateCheque(cid, { estado: 'entregado', purchaseTransactionId: transaction.id, entregadoA });
+          }
+        }),
+      () => set((s) => ({ transactions: s.transactions.filter((x) => x.id !== txTemp) })),
+    );
+  },
+  deleteExpenseTransaction: (id) => {
+    const tx = get().transactions.find((t) => t.id === id);
+    // Si se pagó con dólares, devolver esos dólares a la tenencia (borrar la salida vinculada).
+    if (tx?.usdOperationId) get().deleteUsdOperation(tx.usdOperationId);
+    // Si se pagó con cheques de cartera, devolverlos a "en cartera".
+    for (const c of get().cheques.filter((c) => c.purchaseTransactionId === id)) {
+      get().updateCheque(c.id, { estado: 'en_cartera' });
+    }
+    get().deleteTransaction(id);
   },
 
   // ── Settings ───────────────────────────────────────────────────────────

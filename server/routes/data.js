@@ -70,6 +70,8 @@ const mapTransaction = (r) => ({
   description: r.description, date: r.date,
   vehicleId: n(r.vehicle_id), clientId: n(r.client_id), supplierId: n(r.supplier_id),
   paid: r.paid === 1, paidDate: n(r.paid_date),
+  paymentMethod: r.payment_method ?? 'efectivo', payee: r.payee ?? '',
+  usdAmount: n(r.usd_amount), usdRate: n(r.usd_rate), usdOperationId: n(r.usd_operation_id),
   createdAt: r.created_at,
 });
 const mapTransfer = (r) => ({
@@ -106,7 +108,8 @@ const mapCheque = (r) => ({
   endosadoPor: r.endosado_por ?? '', dniEndosante: r.dni_endosante ?? '',
   librador: r.librador, cuitLibrador: r.cuit_librador, recibidoDe: r.recibido_de,
   entregadoA: r.entregado_a, estado: r.estado, observaciones: r.observaciones,
-  saleId: n(r.sale_id), purchaseVehicleId: n(r.purchase_vehicle_id), purchaseAssetId: n(r.purchase_asset_id), createdAt: r.created_at,
+  saleId: n(r.sale_id), purchaseVehicleId: n(r.purchase_vehicle_id), purchaseAssetId: n(r.purchase_asset_id),
+  purchaseTransactionId: n(r.purchase_transaction_id), createdAt: r.created_at,
 });
 const mapSena = (r) => ({
   id: r.id, type: r.type, vehicleId: n(r.vehicle_id), clientId: n(r.client_id),

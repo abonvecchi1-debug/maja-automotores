@@ -341,6 +341,16 @@ try { db.exec(`ALTER TABLE cheques ADD COLUMN sale_id TEXT`); } catch {}
 try { db.exec(`ALTER TABLE cheques ADD COLUMN purchase_vehicle_id TEXT`); } catch {}
 // Ídem para un bien de capital (trailer, herramientas, etc.).
 try { db.exec(`ALTER TABLE cheques ADD COLUMN purchase_asset_id TEXT`); } catch {}
+// Ídem para un gasto (transacción de egreso) pagado con un cheque de cartera.
+try { db.exec(`ALTER TABLE cheques ADD COLUMN purchase_transaction_id TEXT`); } catch {}
+// Medio de pago de un gasto: 'efectivo' | 'cheque' | 'dolares' (+ a quién le pagué).
+// usd_amount/usd_rate: cuando el gasto se pagó con dólares de la tenencia.
+// usd_operation_id: la operación de dólares (salida al promedio) que generó ese pago.
+try { db.exec(`ALTER TABLE transactions ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'efectivo'`); } catch {}
+try { db.exec(`ALTER TABLE transactions ADD COLUMN payee TEXT NOT NULL DEFAULT ''`); } catch {}
+try { db.exec(`ALTER TABLE transactions ADD COLUMN usd_amount REAL`); } catch {}
+try { db.exec(`ALTER TABLE transactions ADD COLUMN usd_rate REAL`); } catch {}
+try { db.exec(`ALTER TABLE transactions ADD COLUMN usd_operation_id TEXT`); } catch {}
 // Seña sobre el vehículo (reserva con depósito): venta = me lo señaron, compra = yo lo señé
 try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_amount REAL`); } catch {}
 try { db.exec(`ALTER TABLE vehicles ADD COLUMN sena_date TEXT`); } catch {}
