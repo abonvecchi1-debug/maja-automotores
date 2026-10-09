@@ -328,6 +328,9 @@ try { db.exec(`ALTER TABLE transactions ADD COLUMN paid INTEGER NOT NULL DEFAULT
 try { db.exec(`ALTER TABLE transactions ADD COLUMN paid_date TEXT`); } catch {}
 // Desglose de medios de pago de una venta (JSON: [{method, amount, reference}])
 try { db.exec(`ALTER TABLE sales ADD COLUMN payment_methods TEXT NOT NULL DEFAULT '[]'`); } catch {}
+// Reconocimiento de ganancia: 'upfront' (default, ventas viejas/contado) | 'collected'
+// (financiadas nuevas → la ganancia se reparte al cobrar la entrega y cada cuota).
+try { db.exec(`ALTER TABLE sales ADD COLUMN profit_recognition TEXT NOT NULL DEFAULT 'upfront'`); } catch {}
 // Interés de las cuotas propias: 'none' | 'fixed' (recargo total, interest_rate %) | 'inflation'
 try { db.exec(`ALTER TABLE sales ADD COLUMN interest_type TEXT NOT NULL DEFAULT 'none'`); } catch {}
 try { db.exec(`ALTER TABLE sales ADD COLUMN interest_rate REAL NOT NULL DEFAULT 0`); } catch {}

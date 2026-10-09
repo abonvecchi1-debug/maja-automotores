@@ -35,6 +35,8 @@ const mapSale = (r) => ({
   id: r.id, vehicleId: r.vehicle_id, clientId: r.client_id, saleDate: r.sale_date,
   salePrice: r.sale_price, paymentType: r.payment_type, downPayment: r.down_payment,
   installments: r.installments, installmentAmount: r.installment_amount,
+  interestType: r.interest_type ?? 'none', interestRate: r.interest_rate ?? 0,
+  profitRecognition: r.profit_recognition ?? 'upfront',
   invoiceNumber: n(r.invoice_number), tradeInVehicleId: n(r.trade_in_vehicle_id),
   tradeInValue: n(r.trade_in_value), paymentMethods: j(r.payment_methods ?? '[]'),
   notes: r.notes, createdAt: r.created_at,
@@ -42,6 +44,7 @@ const mapSale = (r) => ({
 const mapPayment = (r) => ({
   id: r.id, saleId: r.sale_id, installmentNumber: r.installment_number,
   dueDate: r.due_date, amount: r.amount, paid: bool(r.paid), paidDate: n(r.paid_date),
+  paidAmount: n(r.paid_amount), inflationRate: n(r.inflation_rate),
 });
 const mapSupplier = (r) => ({
   id: r.id, name: r.name, type: r.type, phone: r.phone, email: r.email,

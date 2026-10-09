@@ -150,6 +150,11 @@ export interface Sale {
   tradeInVehicleId?: string; // auto entregado en parte de pago
   tradeInValue?: number;    // valor asignado al auto de parte de pago
   paymentMethods?: SalePayment[];  // desglose de medios de pago (efectivo, transferencia, cheque, etc.)
+  // Cómo se reconoce la ganancia de la venta:
+  //  - 'upfront' (o vacío): toda la ganancia al vender (ventas viejas y de contado).
+  //  - 'collected': la ganancia se reparte a medida que se cobra (entrega + cada cuota).
+  //    Se usa en ventas FINANCIADAS nuevas; las cuotas cobradas suman ganancia su mes.
+  profitRecognition?: 'upfront' | 'collected';
   notes: string;
   createdAt: string;
 }

@@ -21,6 +21,7 @@ const mapSale = (r) => ({
   installmentAmount: r.installment_amount,
   interestType: r.interest_type ?? 'none',
   interestRate: r.interest_rate ?? 0,
+  profitRecognition: r.profit_recognition ?? 'upfront',
   invoiceNumber: r.invoice_number ?? undefined,
   tradeInVehicleId: r.trade_in_vehicle_id ?? undefined,
   tradeInValue: r.trade_in_value ?? undefined,
@@ -76,12 +77,13 @@ router.post('/', (req, res) => {
 
     db.prepare(`
       INSERT INTO sales (id,vehicle_id,client_id,sale_date,sale_price,payment_type,down_payment,
-        installments,installment_amount,interest_type,interest_rate,invoice_number,trade_in_vehicle_id,trade_in_value,payment_methods,notes,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        installments,installment_amount,interest_type,interest_rate,profit_recognition,invoice_number,trade_in_vehicle_id,trade_in_value,payment_methods,notes,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       saleId, sale.vehicleId, sale.clientId, sale.saleDate, sale.salePrice,
       sale.paymentType, sale.downPayment ?? 0, sale.installments ?? 0,
       sale.installmentAmount ?? 0, sale.interestType ?? 'none', sale.interestRate ?? 0,
+      sale.profitRecognition ?? 'upfront',
       sale.invoiceNumber ?? null,
       tradeInVehicleId, (tradeIn?.value ?? sale.tradeInValue) ?? null,
       JSON.stringify(sale.paymentMethods ?? []),

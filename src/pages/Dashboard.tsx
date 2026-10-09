@@ -5,7 +5,7 @@ import { useStore } from '../store';
 import { StatCard, Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { formatCurrency, formatCurrencyShort, formatDate, statusLabel, statusColor } from '../utils/formatters';
-import { usdRealizedProfits } from '../utils/finance';
+import { usdRealizedProfits, allSaleProfitEvents } from '../utils/finance';
 
 export function Dashboard() {
   const {
@@ -17,6 +17,12 @@ export function Dashboard() {
   const usdProfits = usdRealizedProfits(usdOperations);
   const usdGanancia = (month: string) => usdProfits.filter((p) => (p.date || '').startsWith(month) && p.profit >= 0).reduce((a, p) => a + p.profit, 0);
   const usdPerdida = (month: string) => usdProfits.filter((p) => (p.date || '').startsWith(month) && p.profit < 0).reduce((a, p) => a - p.profit, 0);
+
+  // Ganancia de autos reconocida por mes (igual criterio que Finanzas): 'upfront' = toda al vender;
+  // 'collected' (financiadas nuevas) = entrega + cada cuota cobrada en su mes.
+  const saleEvents = allSaleProfitEvents(vehicles, sales, installmentPayments);
+  const saleGanancia = (month: string) => saleEvents.filter((e) => e.date.startsWith(month) && e.amount > 0).reduce((a, e) => a + e.amount, 0);
+  const salePerdida = (month: string) => saleEvents.filter((e) => e.date.startsWith(month) && e.amount < 0).reduce((a, e) => a - e.amount, 0);
 
   const today = new Date().toISOString().split('T')[0];
   const thisMonth = today.slice(0, 7);
@@ -30,7 +36,7 @@ export function Dashboard() {
 
   // Ingresos = GANANCIA de las ventas (precio − costo), no el precio total. Comprar el auto
   // no es gasto (es capital), así que el costo no figura como egreso: ya está en la ganancia.
-  const monthRevenue = soldThisMonth.reduce((acc, v) => acc + Math.max(0, (v.soldPrice ?? 0) - v.purchasePrice), 0)
+  const monthRevenue = saleGanancia(thisMonth)
     + transactions
         .filter((t) => t.type === 'ingreso' && t.category !== 'saldo_inicial' && t.date.startsWith(thisMonth))
         .reduce((acc, t) => acc + t.amount, 0)
@@ -48,8 +54,8 @@ export function Dashboard() {
     + taxPayments
         .filter((t) => t.paid && t.paidDate?.startsWith(thisMonth))
         .reduce((acc, t) => acc + t.amount, 0)
-    // Solo cuenta como egreso si se vendió a pérdida (costo mayor al precio).
-    + soldThisMonth.reduce((acc, v) => acc + Math.max(0, v.purchasePrice - (v.soldPrice ?? 0)), 0)
+    // Solo cuenta como egreso si se vendió a pérdida (costo mayor a lo cobrado).
+    + salePerdida(thisMonth)
     + usdPerdida(thisMonth);  // pérdida por venta de dólares
 
   const monthIIBB = (soldThisMonth.reduce((acc, v) => acc + (v.soldPrice ?? 0), 0)) * (settings.iibbRate / 100);
@@ -86,9 +92,7 @@ export function Dashboard() {
     d.setMonth(d.getMonth() - (5 - i));
     const m = d.toISOString().slice(0, 7);
     const monthLabel = d.toLocaleString('es-AR', { month: 'short' });
-    const ingresos = vehicles
-      .filter((v) => v.status === 'vendido' && v.soldDate?.startsWith(m))
-      .reduce((acc, v) => acc + Math.max(0, (v.soldPrice ?? 0) - v.purchasePrice), 0)
+    const ingresos = saleGanancia(m)
       + usdGanancia(m);
     const gastos = expenses
       .filter((e) => e.date.startsWith(m))
@@ -102,9 +106,7 @@ export function Dashboard() {
       + taxPayments
           .filter((t) => t.paid && t.paidDate?.startsWith(m))
           .reduce((acc, t) => acc + t.amount, 0)
-      + vehicles
-          .filter((v) => v.status === 'vendido' && v.soldDate?.startsWith(m))
-          .reduce((acc, v) => acc + Math.max(0, v.purchasePrice - (v.soldPrice ?? 0)), 0)
+      + salePerdida(m)
       + usdPerdida(m);
     const ingresosTx = transactions
       .filter((t) => t.type === 'ingreso' && t.category !== 'saldo_inicial' && t.date.startsWith(m))

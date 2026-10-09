@@ -11,7 +11,7 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { confirmDialog, notify } from '../components/ui/Feedback';
 import { formatCurrency, formatDate, getCurrentMonth, formatMonthLabel } from '../utils/formatters';
-import { usdRealizedProfits } from '../utils/finance';
+import { usdRealizedProfits, saleProfitEvents } from '../utils/finance';
 
 const INCOME_CATEGORIES = [
   { value: 'venta_contado', label: 'Venta al contado' },
@@ -55,6 +55,9 @@ const categoryLabel: Record<string, string> = {
   perdida_venta: 'Pérdida de venta',
   ganancia_dolares: 'Ganancia dólares',
   perdida_dolares: 'Pérdida dólares',
+  ganancia_cuota: 'Ganancia cuota',
+  perdida_cuota: 'Pérdida cuota',
+  cobro_cuota: 'Cobro de cuota',
   cuota: 'Cuota',
   seña: 'Seña',
   otro_ingreso: 'Otro ingreso',
@@ -67,7 +70,7 @@ const categoryLabel: Record<string, string> = {
 };
 
 /** Movimiento unificado de todas las fuentes de dinero (igual criterio que Reportes). */
-type MovSource = 'venta' | 'costo' | 'tx' | 'gasto' | 'fijo' | 'impuesto' | 'dolares';
+type MovSource = 'venta' | 'costo' | 'tx' | 'gasto' | 'fijo' | 'impuesto' | 'dolares' | 'cuota';
 type Movement = {
   key: string;
   source: MovSource;
@@ -82,14 +85,19 @@ type Movement = {
   vehicleId?: string;   // id del vehículo (ventas / costo)
   payee?: string;       // a quién se le pagó (egresos manuales)
   method?: 'efectivo' | 'cheque' | 'dolares'; // medio de pago (egresos manuales)
+  countInPL?: boolean;  // false = se muestra pero NO suma a ingresos/utilidad (ej. cobro de cuota de venta vieja)
 };
 
 const sourceTag: Record<MovSource, string> = {
-  venta: 'Venta', costo: 'Costo auto', tx: 'Finanzas', gasto: 'Gasto', fijo: 'Gasto fijo', impuesto: 'Impuesto', dolares: 'Dólares',
+  venta: 'Venta', costo: 'Costo auto', tx: 'Finanzas', gasto: 'Gasto', fijo: 'Gasto fijo', impuesto: 'Impuesto', dolares: 'Dólares', cuota: 'Cuota',
 };
 
 export function Finance() {
-  const { transactions, vehicles, sales, installmentPayments, cheques, expenses, fixedExpenseRecords, taxPayments, usdOperations, capitalAssets, addTransaction, addExpenseWithPayment, deleteExpenseTransaction, markTransactionPaid } = useStore();
+  const { transactions, vehicles, sales, clients, installmentPayments, cheques, expenses, fixedExpenseRecords, taxPayments, usdOperations, capitalAssets, addTransaction, addExpenseWithPayment, deleteExpenseTransaction, markTransactionPaid } = useStore();
+  const clientName = (id?: string) => {
+    const c = clients.find((x) => x.id === id);
+    return c ? `${c.firstName} ${c.lastName}`.trim() : '';
+  };
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
@@ -107,19 +115,38 @@ export function Finance() {
 
   // ── Movimientos: TODAS las fuentes (mismo criterio que Reportes) ───────────
   const movements: Movement[] = [];
-  // Ventas (ingreso) y costo de compra del auto vendido (egreso), imputados al mes de venta
-  for (const v of vehicles.filter((v) => v.status === 'vendido' && v.soldDate)) {
-    // La venta se marca por su GANANCIA (precio − costo), no por el precio total. Comprar el
-    // auto no fue un gasto (fue capital), así que su costo NO figura como egreso: ya está
-    // descontado dentro de la ganancia. Si vendiste a pérdida, se marca como egreso.
-    const resultado = (v.soldPrice ?? 0) - (v.purchasePrice ?? 0);
-    movements.push({
-      key: `venta-${v.id}`, source: 'venta',
-      type: resultado >= 0 ? 'ingreso' : 'egreso',
-      category: resultado >= 0 ? 'ganancia_venta' : 'perdida_venta',
-      description: `${resultado >= 0 ? 'Ganancia' : 'Pérdida'} · ${v.brand} ${v.model}${v.year ? ' ' + v.year : ''}`.trim(),
-      amount: Math.abs(resultado), date: v.soldDate!, paid: true, vehicleId: v.id,
-    });
+  // Ventas: la GANANCIA (precio − costo), no el precio total. Comprar el auto no fue gasto (fue
+  // capital), así que su costo NO figura como egreso: ya está dentro de la ganancia. Según cómo
+  // se reconozca la venta (ver saleProfitEvents): 'upfront' = toda la ganancia el día de la venta;
+  // 'collected' (financiadas nuevas) = una parte con la entrega y una parte con cada cuota cobrada.
+  for (const v of vehicles.filter((v) => v.status === 'vendido' && (v.soldDate || v.saleId))) {
+    const sale = sales.find((s) => s.id === v.saleId) ?? sales.find((s) => s.vehicleId === v.id);
+    const label = `${v.brand} ${v.model}${v.year ? ' ' + v.year : ''}`.trim();
+    for (const ev of saleProfitEvents(v, sale, installmentPayments)) {
+      const gan = ev.amount >= 0;
+      const desc = ev.isCuota
+        ? `${gan ? 'Ganancia' : 'Pérdida'} cuota ${ev.installmentNumber ?? ''}`.trim() + ` · ${label}`
+        : `${gan ? 'Ganancia' : 'Pérdida'} · ${label}`;
+      movements.push({
+        key: ev.key, source: ev.isCuota ? 'cuota' : 'venta',
+        type: gan ? 'ingreso' : 'egreso',
+        category: ev.isCuota ? (gan ? 'ganancia_cuota' : 'perdida_cuota') : (gan ? 'ganancia_venta' : 'perdida_venta'),
+        description: desc,
+        amount: Math.abs(ev.amount), date: ev.date, paid: true, vehicleId: v.id,
+      });
+    }
+    // Ventas 'upfront' financiadas (viejas, ej. Sofía): la ganancia ya se contó entera al vender,
+    // así que cada cuota cobrada se muestra SOLO como recuento del cobro (no suma ganancia de nuevo).
+    const prorated = !!sale && sale.profitRecognition === 'collected' && sale.paymentType === 'financiado';
+    if (sale && !prorated) {
+      for (const p of installmentPayments.filter((p) => p.saleId === sale.id && p.paid && p.paidDate)) {
+        movements.push({
+          key: `cobro-${p.id}`, source: 'cuota', type: 'ingreso', category: 'cobro_cuota',
+          description: `Cobro de cuota ${p.installmentNumber ?? ''}`.trim() + (clientName(sale.clientId) ? ` · ${clientName(sale.clientId)}` : ''),
+          amount: p.paidAmount ?? p.amount, date: p.paidDate!, paid: true, vehicleId: v.id, countInPL: false,
+        });
+      }
+    }
   }
   // Transacciones manuales de Finanzas (el "saldo inicial" no es un movimiento del mes)
   for (const t of transactions) {
@@ -165,7 +192,8 @@ export function Finance() {
 
   // Un egreso cuenta salvo que sea una transacción manual de Finanzas sin pagar
   // (los gastos variables, fijos e impuestos cuentan igual que en Reportes).
-  const countsAsExpense = (m: Movement) => m.type === 'egreso' && !(m.source === 'tx' && !m.paid);
+  const countsAsExpense = (m: Movement) => m.type === 'egreso' && m.countInPL !== false && !(m.source === 'tx' && !m.paid);
+  const countsAsIncome = (m: Movement) => m.type === 'ingreso' && m.countInPL !== false;
 
   const filtered = movements
     .filter((m) => !monthFilter || m.date.startsWith(monthFilter))
@@ -173,7 +201,7 @@ export function Finance() {
     .sort((a, b) => b.date.localeCompare(a.date));
 
   const monthMovements = movements.filter((m) => !monthFilter || m.date.startsWith(monthFilter));
-  const monthIncome = monthMovements.filter((m) => m.type === 'ingreso').reduce((a, m) => a + m.amount, 0);
+  const monthIncome = monthMovements.filter(countsAsIncome).reduce((a, m) => a + m.amount, 0);
   const monthExpense = monthMovements.filter(countsAsExpense).reduce((a, m) => a + m.amount, 0);
   const monthUtilidad = monthIncome - monthExpense;
   const pendingExpense = monthMovements.filter((m) => m.type === 'egreso' && !m.paid).reduce((a, m) => a + m.amount, 0);
@@ -186,7 +214,7 @@ export function Finance() {
     const m = d.toISOString().slice(0, 7);
     const label = d.toLocaleString('es-AR', { month: 'short' });
     const mov = movements.filter((x) => x.date.startsWith(m));
-    const ingresos = mov.filter((x) => x.type === 'ingreso').reduce((a, x) => a + x.amount, 0);
+    const ingresos = mov.filter(countsAsIncome).reduce((a, x) => a + x.amount, 0);
     const egresos = mov.filter(countsAsExpense).reduce((a, x) => a + x.amount, 0);
     return { mes: label, Ingresos: Math.round(ingresos / 1000), Egresos: Math.round(egresos / 1000) };
   });

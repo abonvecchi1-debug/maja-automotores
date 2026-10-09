@@ -308,6 +308,9 @@ export const useStore = create<AppStore>((set, get) => ({
   // ── Sales ──────────────────────────────────────────────────────────────
   addSale: (s, payments, cheques = [], tradeIn) => {
     const saleId = uid();
+    // Ventas financiadas NUEVAS: la ganancia se reconoce a medida que se cobra (entrega + cuotas).
+    // Las de contado quedan 'upfront' (toda la ganancia al vender). Las viejas en la base ya son 'upfront'.
+    s = { ...s, profitRecognition: s.profitRecognition ?? (s.paymentType === 'financiado' ? 'collected' : 'upfront') };
     const newSale: Sale = { ...s, id: saleId, createdAt: now() };
     const newPayments: InstallmentPayment[] = payments.map((p) => ({ ...p, id: uid(), saleId }));
     const newCheques: Cheque[] = cheques.map((c) => ({ ...c, id: uid(), saleId, createdAt: now() }));
