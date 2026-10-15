@@ -36,7 +36,7 @@ const mapSale = (r) => ({
   salePrice: r.sale_price, paymentType: r.payment_type, downPayment: r.down_payment,
   installments: r.installments, installmentAmount: r.installment_amount,
   interestType: r.interest_type ?? 'none', interestRate: r.interest_rate ?? 0,
-  profitRecognition: r.profit_recognition ?? 'upfront',
+  profitRecognition: r.profit_recognition ?? 'upfront', usdOperationId: n(r.usd_operation_id),
   invoiceNumber: n(r.invoice_number), tradeInVehicleId: n(r.trade_in_vehicle_id),
   tradeInValue: n(r.trade_in_value), paymentMethods: j(r.payment_methods ?? '[]'),
   notes: r.notes, createdAt: r.created_at,

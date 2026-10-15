@@ -173,8 +173,12 @@ router.put('/:id/revert-sale', (req, res) => {
   const existing = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'Vehículo no encontrado' });
   const saleId = existing.sale_id;
+  const saleRow = saleId ? db.prepare('SELECT usd_operation_id FROM sales WHERE id = ?').get(saleId) : null;
+  const usdOperationId = saleRow?.usd_operation_id ?? null;
   const run = db.transaction(() => {
     if (saleId) {
+      // Dólares recibidos en la venta → salen de la tenencia al revertir.
+      if (usdOperationId) db.prepare('DELETE FROM usd_operations WHERE id = ?').run(usdOperationId);
       db.prepare('DELETE FROM installment_payments WHERE sale_id = ?').run(saleId);
       // Solo se borran los cheques que siguen en cartera. Los ya cobrados/entregados/etc.
       // se conservan (se desvinculan de la venta) para no perder ese registro financiero.
@@ -186,7 +190,7 @@ router.put('/:id/revert-sale', (req, res) => {
       sold_to_client_id=NULL, sale_id=NULL, trade_in_vehicle_id=NULL WHERE id=?`).run(id);
   });
   run();
-  res.json({ vehicle: map(db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id)), deletedSaleId: saleId ?? null });
+  res.json({ vehicle: map(db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id)), deletedSaleId: saleId ?? null, deletedUsdOperationId: usdOperationId });
 });
 
 router.delete('/:id', (req, res) => {

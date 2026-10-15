@@ -79,6 +79,7 @@ export function VehicleDetail() {
   const [sellForm, setSellForm] = useState({
     soldPrice: 0, soldDate: new Date().toISOString().split('T')[0], clientId: '',
     payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '',
+    payDolaresUsd: 0, payDolaresRate: 0,
     senaAplicada: 0, cheques: [] as ChequeDraft[],
     financiaPropia: false, cuotas: 12,
     interestType: 'none' as 'none' | 'fixed' | 'inflation', interestPct: 0,
@@ -141,6 +142,7 @@ export function VehicleDetail() {
       soldDate: new Date().toISOString().split('T')[0],
       clientId: vehicle.senaClientId ?? '',
       payEfectivo: 0, payTransferencia: 0, payPrendario: 0, prendarioRef: '',
+      payDolaresUsd: 0, payDolaresRate: 0,
       senaAplicada: senaActivaVenta, cheques: [],
       financiaPropia: false, cuotas: 12,
       interestType: 'none', interestPct: 0,
@@ -158,8 +160,9 @@ export function VehicleDetail() {
     setSellForm((f) => ({ ...f, cheques: f.cheques.filter((_, idx) => idx !== i) }));
 
   const sellChequesTotal = sellForm.cheques.reduce((a, c) => a + (c.monto || 0), 0);
+  const sellPayDolaresPesos = (sellForm.payDolaresUsd || 0) * (sellForm.payDolaresRate || 0);
   const sellAssignedTotal =
-    sellForm.payEfectivo + sellForm.payTransferencia + sellForm.payPrendario +
+    sellForm.payEfectivo + sellForm.payTransferencia + sellForm.payPrendario + sellPayDolaresPesos +
     sellChequesTotal + sellTradeIn.value + sellForm.senaAplicada;
   const sellAssignedRemainder = sellForm.soldPrice - sellAssignedTotal;
   // Financiación propia (cuotas nuestras): la entrega es lo asignado arriba y el resto se
@@ -174,12 +177,16 @@ export function VehicleDetail() {
   const handleSell = () => {
     if (sellingRef.current) return;  // ya se está registrando: ignora el doble-click (evita ventas duplicadas)
     if (!sellForm.soldPrice || sellForm.soldPrice <= 0) { notify('Poné el precio de venta.', 'error'); return; }
+    if (sellForm.payDolaresUsd > 0 && (!sellForm.payDolaresRate || sellForm.payDolaresRate <= 0)) {
+      notify('Poné la cotización del dólar para el pago en dólares.', 'error'); return;
+    }
 
     // Desglose de medios de pago (la "entrega")
     const paymentMethods: SalePayment[] = [];
     if (sellForm.payEfectivo > 0) paymentMethods.push({ method: 'efectivo', amount: sellForm.payEfectivo });
     if (sellForm.payTransferencia > 0) paymentMethods.push({ method: 'transferencia', amount: sellForm.payTransferencia });
     if (sellForm.payPrendario > 0) paymentMethods.push({ method: 'credito_prendario', amount: sellForm.payPrendario, reference: sellForm.prendarioRef || undefined });
+    if (sellPayDolaresPesos > 0) paymentMethods.push({ method: 'dolares', amount: sellPayDolaresPesos, amountUsd: sellForm.payDolaresUsd, rate: sellForm.payDolaresRate });
     if (sellChequesTotal > 0) paymentMethods.push({ method: 'cheque', amount: sellChequesTotal });
     if (sellTradeIn.value > 0) paymentMethods.push({ method: 'parte_pago', amount: sellTradeIn.value });
     if (sellForm.senaAplicada > 0) {
@@ -234,6 +241,10 @@ export function VehicleDetail() {
         payments,
         chequeDrafts,
         toTradeInInput(sellTradeIn),
+        sellPayDolaresPesos > 0
+          ? { amountUsd: sellForm.payDolaresUsd, rate: sellForm.payDolaresRate, date: sellForm.soldDate,
+              notes: `Recibido por venta · ${vehicle.brand} ${vehicle.model}`.trim() }
+          : undefined,
       );
     } else {
       // Sin desglose ni cuotas: venta simple (Finanzas toma el precio como plata líquida).
@@ -963,6 +974,22 @@ export function VehicleDetail() {
               <Input label="Entidad del prendario (opcional)" value={sellForm.prendarioRef}
                 onChange={(e) => setSellForm((f) => ({ ...f, prendarioRef: e.target.value }))}
                 placeholder="Ej: Banco Nación" />
+            </div>
+
+            {/* Pago en dólares → entra a la tenencia de Dólares (no al disponible en pesos) */}
+            <div className="border-t border-slate-200/70 pt-3">
+              <p className="text-xs font-medium text-slate-600 mb-1.5">Pago en dólares (opcional)</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input label="Dólares recibidos (U$S)" type="number" value={sellForm.payDolaresUsd}
+                  onChange={(e) => setSellForm((f) => ({ ...f, payDolaresUsd: +e.target.value }))} />
+                <Input label="Cotización ($ por U$S)" type="number" value={sellForm.payDolaresRate}
+                  onChange={(e) => setSellForm((f) => ({ ...f, payDolaresRate: +e.target.value }))} />
+              </div>
+              {sellPayDolaresPesos > 0 && (
+                <p className="text-[11px] text-slate-500 mt-1">
+                  = <b>{formatCurrency(sellPayDolaresPesos)}</b> · esos U$S {sellForm.payDolaresUsd.toLocaleString('es-AR')} entran a tu tenencia de dólares
+                </p>
+              )}
             </div>
 
             {/* Cheques */}

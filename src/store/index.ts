@@ -51,7 +51,7 @@ interface AppStore {
   updateClient: (id: string, data: Partial<Client>) => void;
   deleteClient: (id: string) => void;
 
-  addSale: (s: Omit<Sale, 'id' | 'createdAt'>, payments: Omit<InstallmentPayment, 'id'>[], cheques?: Omit<Cheque, 'id' | 'createdAt'>[], tradeIn?: TradeInInput) => void;
+  addSale: (s: Omit<Sale, 'id' | 'createdAt'>, payments: Omit<InstallmentPayment, 'id'>[], cheques?: Omit<Cheque, 'id' | 'createdAt'>[], tradeIn?: TradeInInput, usdReceived?: { amountUsd: number; rate: number; date?: string; notes?: string }) => void;
   sellVehicle: (id: string, data: { soldPrice: number; soldDate: string; clientId?: string; tradeIn?: TradeInInput }) => void;
   revertSale: (id: string) => void;
   markInstallmentPaid: (id: string, inflationRate?: number) => void;
@@ -306,7 +306,7 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   // ── Sales ──────────────────────────────────────────────────────────────
-  addSale: (s, payments, cheques = [], tradeIn) => {
+  addSale: (s, payments, cheques = [], tradeIn, usdReceived) => {
     const saleId = uid();
     // Ventas financiadas NUEVAS: la ganancia se reconoce a medida que se cobra (entrega + cuotas).
     // Las de contado quedan 'upfront' (toda la ganancia al vender). Las viejas en la base ya son 'upfront'.
@@ -324,14 +324,16 @@ export const useStore = create<AppStore>((set, get) => ({
       ),
     }));
     sync(
-      () => authFetch('/api/sales', { method: 'POST', body: JSON.stringify({ sale: s, payments, cheques, tradeIn }) })
+      () => authFetch('/api/sales', { method: 'POST', body: JSON.stringify({ sale: s, payments, cheques, tradeIn, usdReceived }) })
         // fetch NO rechaza en errores HTTP: si el server falló, lanzamos para que corra el revert.
         .then(async (r) => { if (!r.ok) throw new Error(`Sale POST ${r.status}`); return r.json(); })
-        .then(({ sale, payments: pms, cheques: chs, tradeInVehicleId }) => {
+        .then(({ sale, payments: pms, cheques: chs, tradeInVehicleId, usdOperation }) => {
           set((st) => ({
             sales: st.sales.map((x) => x.id === saleId ? sale : x),
             installmentPayments: [...st.installmentPayments.filter((x) => !newPayments.find((p) => p.id === x.id)), ...pms],
             cheques: [...st.cheques.filter((x) => !newCheques.find((c) => c.id === x.id)), ...(chs ?? [])],
+            // Dólares recibidos en la venta → entran a la tenencia (apartado Dólares).
+            usdOperations: usdOperation ? [...st.usdOperations, usdOperation] : st.usdOperations,
             // Apuntar el vehículo al id REAL de la venta que asignó el servidor (antes quedaba
             // con el id optimista del cliente → referencia colgada y enredo de cuotas al revertir).
             vehicles: st.vehicles.map((v) => v.id === s.vehicleId ? { ...v, saleId: sale.id } : v),
@@ -370,11 +372,14 @@ export const useStore = create<AppStore>((set, get) => ({
   revertSale: (id) => {
     const v = get().vehicles.find((x) => x.id === id);
     const saleId = v?.saleId;
+    const usdOpId = saleId ? get().sales.find((x) => x.id === saleId)?.usdOperationId : undefined;
     set((s) => ({
       vehicles: s.vehicles.map((x) => x.id === id
         ? { ...x, status: 'publicado' as const, soldPrice: undefined, soldDate: undefined, soldToClientId: undefined, saleId: undefined, tradeInVehicleId: undefined }
         : x),
       sales: saleId ? s.sales.filter((x) => x.id !== saleId) : s.sales,
+      // Dólares recibidos en esa venta → salen de la tenencia al revertir.
+      usdOperations: usdOpId ? s.usdOperations.filter((o) => o.id !== usdOpId) : s.usdOperations,
       installmentPayments: saleId ? s.installmentPayments.filter((p) => p.saleId !== saleId) : s.installmentPayments,
       cheques: saleId
         ? s.cheques

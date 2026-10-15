@@ -22,6 +22,7 @@ const mapSale = (r) => ({
   interestType: r.interest_type ?? 'none',
   interestRate: r.interest_rate ?? 0,
   profitRecognition: r.profit_recognition ?? 'upfront',
+  usdOperationId: r.usd_operation_id ?? undefined,
   invoiceNumber: r.invoice_number ?? undefined,
   tradeInVehicleId: r.trade_in_vehicle_id ?? undefined,
   tradeInValue: r.trade_in_value ?? undefined,
@@ -60,12 +61,22 @@ router.get('/', (req, res) => {
 
 // Creates sale + installment payments + marks vehicle as sold, all in one transaction
 router.post('/', (req, res) => {
-  const { sale, payments, cheques, tradeIn } = req.body;
+  const { sale, payments, cheques, tradeIn, usdReceived } = req.body;
   const saleId = randomUUID();
   const now = new Date().toISOString();
   let tradeInVehicleId = sale.tradeInVehicleId ?? null;
+  // Pago en dólares: los dólares recibidos ENTRAN a la tenencia como una compra a esa cotización.
+  let usdOperationId = null;
+  const usd = usdReceived && (usdReceived.amountUsd ?? 0) > 0 ? usdReceived : null;
 
   const insertSale = db.transaction(() => {
+    if (usd) {
+      usdOperationId = randomUUID();
+      db.prepare(`INSERT INTO usd_operations (id,type,amount_usd,rate,amount_pesos,date,notes,created_at)
+        VALUES (?,?,?,?,?,?,?,?)`)
+        .run(usdOperationId, 'compra', usd.amountUsd, usd.rate ?? 0, (usd.amountUsd * (usd.rate ?? 0)),
+          usd.date ?? sale.saleDate, usd.notes ?? 'Recibido por venta de vehículo', now);
+    }
     // Auto recibido en parte de pago: se crea en stock (nuevo) o se marca el existente
     if (tradeIn && tradeIn.type === 'new') {
       tradeInVehicleId = createTradeInVehicle(tradeIn, { clientId: sale.clientId, sourceVehicleId: sale.vehicleId, date: sale.saleDate });
@@ -77,13 +88,13 @@ router.post('/', (req, res) => {
 
     db.prepare(`
       INSERT INTO sales (id,vehicle_id,client_id,sale_date,sale_price,payment_type,down_payment,
-        installments,installment_amount,interest_type,interest_rate,profit_recognition,invoice_number,trade_in_vehicle_id,trade_in_value,payment_methods,notes,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        installments,installment_amount,interest_type,interest_rate,profit_recognition,usd_operation_id,invoice_number,trade_in_vehicle_id,trade_in_value,payment_methods,notes,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       saleId, sale.vehicleId, sale.clientId, sale.saleDate, sale.salePrice,
       sale.paymentType, sale.downPayment ?? 0, sale.installments ?? 0,
       sale.installmentAmount ?? 0, sale.interestType ?? 'none', sale.interestRate ?? 0,
-      sale.profitRecognition ?? 'upfront',
+      sale.profitRecognition ?? 'upfront', usdOperationId,
       sale.invoiceNumber ?? null,
       tradeInVehicleId, (tradeIn?.value ?? sale.tradeInValue) ?? null,
       JSON.stringify(sale.paymentMethods ?? []),
@@ -131,7 +142,12 @@ router.post('/', (req, res) => {
   const createdSale = mapSale(db.prepare('SELECT * FROM sales WHERE id = ?').get(sid));
   const createdPayments = paymentIds.map((pid) => mapPayment(db.prepare('SELECT * FROM installment_payments WHERE id = ?').get(pid)));
   const createdCheques = chequeIds.map((cid) => mapChequeRow(db.prepare('SELECT * FROM cheques WHERE id = ?').get(cid)));
-  res.status(201).json({ sale: createdSale, payments: createdPayments, cheques: createdCheques, tradeInVehicleId });
+  let usdOperation = null;
+  if (usdOperationId) {
+    const u = db.prepare('SELECT * FROM usd_operations WHERE id = ?').get(usdOperationId);
+    if (u) usdOperation = { id: u.id, type: u.type, amountUsd: u.amount_usd, rate: u.rate, amountPesos: u.amount_pesos, date: u.date, notes: u.notes, createdAt: u.created_at };
+  }
+  res.status(201).json({ sale: createdSale, payments: createdPayments, cheques: createdCheques, tradeInVehicleId, usdOperation });
 });
 
 router.put('/installments/:id/pay', (req, res) => {

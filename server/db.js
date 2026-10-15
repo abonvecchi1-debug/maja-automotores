@@ -331,6 +331,8 @@ try { db.exec(`ALTER TABLE sales ADD COLUMN payment_methods TEXT NOT NULL DEFAUL
 // Reconocimiento de ganancia: 'upfront' (default, ventas viejas/contado) | 'collected'
 // (financiadas nuevas → la ganancia se reparte al cobrar la entrega y cada cuota).
 try { db.exec(`ALTER TABLE sales ADD COLUMN profit_recognition TEXT NOT NULL DEFAULT 'upfront'`); } catch {}
+// Compra de dólares (tenencia) generada cuando parte del pago de la venta fue en dólares.
+try { db.exec(`ALTER TABLE sales ADD COLUMN usd_operation_id TEXT`); } catch {}
 // Interés de las cuotas propias: 'none' | 'fixed' (recargo total, interest_rate %) | 'inflation'
 try { db.exec(`ALTER TABLE sales ADD COLUMN interest_type TEXT NOT NULL DEFAULT 'none'`); } catch {}
 try { db.exec(`ALTER TABLE sales ADD COLUMN interest_rate REAL NOT NULL DEFAULT 0`); } catch {}

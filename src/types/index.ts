@@ -13,12 +13,15 @@ export type PaymentMethod =
   | 'cheque'
   | 'credito_prendario'
   | 'parte_pago'   // auto entregado en parte de pago (no es plata líquida)
+  | 'dolares'      // pago en dólares → entra a la tenencia de dólares, no al disponible en pesos
   | 'sena';        // seña previa aplicada a la compra
 
 export interface SalePayment {
   method: PaymentMethod;
-  amount: number;
-  reference?: string;  // entidad del prendario, banco, nota libre, etc.
+  amount: number;       // monto en PESOS (para 'dolares' = amountUsd × rate, equivalente en pesos)
+  reference?: string;   // entidad del prendario, banco, nota libre, etc.
+  amountUsd?: number;   // dólares recibidos (solo method === 'dolares')
+  rate?: number;        // cotización usada para convertir (solo method === 'dolares')
 }
 
 // Auto entregado en parte de pago al registrar una venta.
@@ -155,6 +158,7 @@ export interface Sale {
   //  - 'collected': la ganancia se reparte a medida que se cobra (entrega + cada cuota).
   //    Se usa en ventas FINANCIADAS nuevas; las cuotas cobradas suman ganancia su mes.
   profitRecognition?: 'upfront' | 'collected';
+  usdOperationId?: string;  // si parte del pago fue en dólares: la compra de dólares que entró a la tenencia
   notes: string;
   createdAt: string;
 }
