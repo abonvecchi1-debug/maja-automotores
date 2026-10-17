@@ -10,6 +10,7 @@ interface SyncConfig {
   renderUrl: string;
   lastSync: string | null;
   syncKey: string;
+  groqKeySource?: 'env' | 'local' | null;
 }
 
 interface SyncStatus {
@@ -36,7 +37,31 @@ export function SyncSettings() {
   const [fullSyncing, setFullSyncing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [groqKey, setGroqKey] = useState('');
+  const [groqSaving, setGroqSaving] = useState(false);
+  const [groqError, setGroqError] = useState('');
   const loadAll = useStore((s) => s.loadAll);
+
+  async function saveGroqKey(key: string) {
+    setGroqSaving(true);
+    setGroqError('');
+    try {
+      const res = await fetch('/api/sync/ai-key', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ key }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'No se pudo guardar la clave');
+      setGroqKey('');
+      setConfig((c) => (c ? { ...c, groqKeySource: data.groqKeySource } : c));
+      notify(key ? 'Clave de IA guardada en esta PC' : 'Clave de IA borrada de esta PC', 'success');
+    } catch (e: any) {
+      setGroqError(e.message);
+    } finally {
+      setGroqSaving(false);
+    }
+  }
 
   async function loadConfig() {
     const res = await fetch('/api/sync/config', {
@@ -263,6 +288,59 @@ export function SyncSettings() {
             <li>La app va a sincronizar automáticamente cuando haya internet</li>
           </ol>
         </div>
+      </div>
+
+      {/* Clave de IA (Groq) */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="font-semibold text-gray-800">Clave de IA (Groq)</h2>
+          {config?.groqKeySource ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              <Check size={12} /> {config.groqKeySource === 'env' ? 'Configurada en el servidor' : 'Cargada en esta PC'}
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">Sin cargar</span>
+          )}
+        </div>
+        <p className="text-sm text-gray-500">
+          La usan la lectura de hojas de crédito, la lectura de capturas en Tasación y la opinión de la IA.
+          Se guarda solo en esta computadora, no se sincroniza y no se vuelve a mostrar. Cargala una vez en cada PC.
+        </p>
+        {config?.groqKeySource !== 'env' && (
+          <>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"
+                value={groqKey}
+                onChange={(e) => setGroqKey(e.target.value)}
+                placeholder={config?.groqKeySource === 'local' ? 'Pegá una clave nueva para reemplazarla' : 'gsk_…'}
+                type="password"
+                autoComplete="off"
+                aria-label="Clave de Groq"
+              />
+              <button
+                onClick={() => saveGroqKey(groqKey)}
+                disabled={groqSaving || !groqKey.trim()}
+                className="flex items-center gap-2 px-4 py-2 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+                style={{ backgroundColor: '#262e63' }}
+              >
+                <Save size={15} /> Guardar
+              </button>
+            </div>
+            {config?.groqKeySource === 'local' && (
+              <button
+                onClick={() => confirmDialog({ title: 'Borrar clave de IA', message: '¿Borrar la clave de Groq de esta PC? Las funciones de IA dejan de andar hasta que cargues otra.', confirmLabel: 'Borrar', danger: true }).then((ok) => { if (ok) saveGroqKey(''); })}
+                className="text-xs font-medium text-red-600 hover:text-red-700"
+              >
+                Borrar la clave de esta PC
+              </button>
+            )}
+          </>
+        )}
+        {groqError && <p className="text-sm text-red-500">{groqError}</p>}
+        <p className="text-xs text-gray-400">
+          La sacás gratis en console.groq.com → API Keys → Create API Key.
+        </p>
       </div>
     </div>
   );

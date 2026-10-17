@@ -3,6 +3,7 @@ import db, { SYNCABLE_TABLES } from '../db.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getStatus, triggerSync, forceFullSync } from '../sync-service.js';
 import { applyPushRecords } from '../sync-apply.js';
+import { groqKeySource, setGroqKey } from '../ai-key.js';
 
 const router = express.Router();
 
@@ -31,7 +32,18 @@ router.get('/config', authenticateToken, requireAdmin, (req, res) => {
   const renderUrl = db.prepare("SELECT value FROM sync_config WHERE key = 'render_url'").get()?.value || '';
   const lastSync  = db.prepare("SELECT value FROM sync_config WHERE key = 'last_sync_at'").get()?.value || null;
   const syncKey   = db.prepare("SELECT value FROM sync_config WHERE key = 'sync_key'").get()?.value || '';
-  res.json({ renderUrl, lastSync, syncKey });
+  res.json({ renderUrl, lastSync, syncKey, groqKeySource: groqKeySource() });
+});
+
+/* ── Clave de IA (Groq) de esta PC. Nunca se devuelve: solo si está cargada. ── */
+router.put('/ai-key', authenticateToken, requireAdmin, (req, res) => {
+  const { key } = req.body ?? {};
+  if (typeof key !== 'string') return res.status(400).json({ error: 'key required' });
+  if (key.trim() && !/^gsk_[A-Za-z0-9]{20,}$/.test(key.trim())) {
+    return res.status(400).json({ error: 'Esa no parece una clave de Groq: tiene que empezar con gsk_.' });
+  }
+  setGroqKey(key);
+  res.json({ ok: true, groqKeySource: groqKeySource() });
 });
 
 router.put('/config', authenticateToken, requireAdmin, (req, res) => {

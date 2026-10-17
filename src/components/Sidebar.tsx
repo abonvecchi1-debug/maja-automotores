@@ -3,7 +3,7 @@ import { clsx } from 'clsx';
 import {
   LayoutDashboard, Car, Users, Wrench,
   TrendingUp, Receipt, CheckSquare, FileText,
-  UserCog, LogOut, ArrowLeftRight, MessageSquare, Wallet, X, Banknote, BarChart2, ClipboardList, RefreshCw, HandCoins, DollarSign, FileSignature, Package,
+  UserCog, LogOut, ArrowLeftRight, MessageSquare, Wallet, X, Banknote, BarChart2, ClipboardList, RefreshCw, HandCoins, DollarSign, FileSignature, Package, Calculator,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { SyncStatus } from './SyncStatus';
@@ -22,6 +22,7 @@ const navItems: NavItem[] = [
   { to: '/vehiculos',       icon: Car,             label: 'Vehículos' },
   { to: '/clientes',        icon: Users,           label: 'Clientes' },
   { to: '/cotizaciones',    icon: FileSignature,   label: 'Cotizaciones' },
+  { to: '/tasacion',        icon: Calculator,      label: 'Tasación',        roles: ['admin'] },
   { to: '/consultas',       icon: MessageSquare,   label: 'Consultas',       roles: ['admin'] },
   { to: '/proveedores',     icon: Wrench,          label: 'Proveedores',     roles: ['admin'] },
   { to: '/transferencias',  icon: ArrowLeftRight,  label: 'Transferencias',  roles: ['admin'] },

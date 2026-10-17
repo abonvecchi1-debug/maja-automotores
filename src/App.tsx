@@ -26,6 +26,7 @@ import { Cheques } from './pages/Cheques';
 import { Dollars } from './pages/Dollars';
 import { CapitalAssets } from './pages/CapitalAssets';
 import { Quotes } from './pages/Quotes';
+import { Appraisals } from './pages/Appraisals';
 import { SyncSettings } from './pages/SyncSettings';
 
 /** Runs checkAuth on mount and loads all app data once authenticated. */
@@ -99,6 +100,7 @@ export default function App() {
             <Route path="vehiculos/:id" element={<VehicleDetail />} />
             <Route path="clientes" element={<Clients />} />
             <Route path="cotizaciones" element={<Quotes />} />
+            <Route path="tasacion" element={<ProtectedRoute allowedRoles={['admin']}><Appraisals /></ProtectedRoute>} />
             <Route path="clientes/:id" element={<ClientDetail />} />
 
             {/* Admin-only routes */}

@@ -3,6 +3,7 @@ import Groq from 'groq-sdk';
 import multer from 'multer';
 import { authenticateToken } from '../middleware/auth.js';
 import db from '../db.js';
+import { getGroqKey } from '../ai-key.js';
 import { randomUUID } from 'crypto';
 
 const router = express.Router();
@@ -37,9 +38,10 @@ Devolvé SOLO el JSON, sin texto extra ni markdown ni bloques de código.`;
 router.post('/analyze', authenticateToken, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No se recibió archivo' });
-    if (!process.env.GROQ_API_KEY) return res.status(500).json({ error: 'GROQ_API_KEY no configurada' });
+    const groqKey = getGroqKey();
+    if (!groqKey) return res.status(500).json({ error: 'Falta la clave de IA (Groq). Cargala en Sincronización.' });
 
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const groq = new Groq({ apiKey: groqKey });
     const dataUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
 
     const completion = await groq.chat.completions.create({

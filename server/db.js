@@ -314,6 +314,17 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  -- Tasaciones de autos usados (cotizador): datos del auto, avisos comparables y resultado.
+  CREATE TABLE IF NOT EXISTS appraisals (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL DEFAULT '',
+    form TEXT NOT NULL DEFAULT '{}',      -- JSON: auto, estado, costos y ajustes
+    comps TEXT NOT NULL DEFAULT '[]',     -- JSON: avisos comparables
+    results TEXT NOT NULL DEFAULT '{}',   -- JSON: publicación, toma máxima, ganancia…
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  );
+
 `);
 
 // Migrations for existing DBs
@@ -391,6 +402,7 @@ export const SYNCABLE_TABLES = [
   'transfers', 'leads', 'contact_history', 'daily_cashes', 'cash_movements',
   'fixed_expense_types', 'fixed_expense_records', 'tax_payments',
   'credit_campaigns', 'cheques', 'senas', 'usd_operations', 'capital_assets',
+  'appraisals',
 ];
 
 // Add updated_at column and auto-update triggers to every sync table

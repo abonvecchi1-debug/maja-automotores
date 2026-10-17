@@ -31,6 +31,7 @@ import senasRoutes from './routes/senas.js';
 import usdRoutes from './routes/usd.js';
 import capitalAssetsRoutes from './routes/capitalAssets.js';
 import dolarRoutes from './routes/dolar.js';
+import appraisalsRoutes from './routes/appraisals.js';
 import syncRoutes from './routes/sync.js';
 import publicRoutes from './routes/public.js';
 import { start as startSync } from './sync-service.js';
@@ -87,6 +88,7 @@ app.use('/api/senas', senasRoutes);
 app.use('/api/usd', usdRoutes);
 app.use('/api/capital-assets', capitalAssetsRoutes);
 app.use('/api/dolar', dolarRoutes);
+app.use('/api/appraisals', appraisalsRoutes);
 app.use('/api/sync', syncRoutes);
 
 app.get('/api/health', (req, res) => {
