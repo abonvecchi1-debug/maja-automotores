@@ -76,7 +76,7 @@ interface AppStore {
   markTransactionPaid: (id: string, paid?: boolean) => void;
   deleteTransaction: (id: string) => void;
   // Egreso pagado con cheque de cartera o con dólares de la tenencia.
-  // usd: crea la salida de dólares (al promedio) y la vincula al gasto.
+  // usd: crea la salida de dólares (a la cotización cargada) y la vincula al gasto.
   addExpenseWithPayment: (
     t: Omit<Transaction, 'id' | 'createdAt'>,
     opts: { payChequeIds?: string[]; entregadoA?: string; usd?: { amountUsd: number; rate: number } },
@@ -537,9 +537,9 @@ export const useStore = create<AppStore>((set, get) => ({
   addExpenseWithPayment: (t, opts) => {
     const txTemp = uid();
     if (opts.usd && opts.usd.amountUsd > 0) {
-      // Pagar con dólares = sacar dólares de la tenencia AL PROMEDIO (venta a la cotización
-      // promedio → ganancia 0, es una salida al costo). El gasto en pesos ya vale usd*promedio
-      // y NO toca el Disponible en pesos (lo pagaron los dólares). Se encadenan: primero la
+      // Pagar con dólares = vender dólares de la tenencia a la cotización que cargó el usuario
+      // (la diferencia contra el promedio es ganancia/pérdida de dólares). El gasto en pesos
+      // vale usd*cotización y NO toca el Disponible en pesos (lo pagaron los dólares). Se encadenan: primero la
       // operación de dólares (para tener su id real) y luego la transacción vinculada.
       const usdTemp = uid();
       const usdBody = {

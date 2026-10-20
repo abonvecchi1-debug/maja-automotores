@@ -248,7 +248,7 @@ export interface Transaction {
   paymentMethod?: 'efectivo' | 'cheque' | 'dolares'; // con qué se pagó el egreso
   payee?: string;        // a quién le pagué (opcional)
   usdAmount?: number;    // dólares usados si se pagó con dólares
-  usdRate?: number;      // cotización usada (promedio de la tenencia)
+  usdRate?: number;      // cotización a la que se usaron los dólares (la carga el usuario)
   usdOperationId?: string; // operación de dólares (salida) vinculada a este pago
   createdAt: string;
 }

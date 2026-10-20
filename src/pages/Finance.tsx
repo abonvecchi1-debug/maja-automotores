@@ -40,6 +40,7 @@ const INITIAL_FORM = {
   method: 'efectivo' as 'efectivo' | 'cheque' | 'dolares', // medio de pago (solo egresos)
   payee: '',      // a quién le pagué (opcional)
   usdAmount: 0,   // dólares usados si method === 'dolares'
+  usdRate: 0,     // cotización a la que usé esos dólares ($ por U$S), la pongo yo
 };
 
 const PAYMENT_METHODS = [
@@ -322,7 +323,10 @@ export function Finance() {
 
   // Cheques ARS en cartera disponibles para pagar un gasto.
   const carteraCheques = cheques.filter((c) => c.moneda === 'ARS' && c.estado === 'en_cartera');
-  const usdExpensePesos = Math.round((form.usdAmount || 0) * usdAvgCost); // valor del gasto en pesos al promedio
+  // Valor del gasto en pesos a la cotización que cargué. La diferencia contra el promedio
+  // queda como ganancia/pérdida de dólares (igual que una venta en el apartado Dólares).
+  const usdExpensePesos = Math.round((form.usdAmount || 0) * (form.usdRate || 0));
+  const usdExpenseDiff = (form.usdAmount || 0) * ((form.usdRate || 0) - usdAvgCost);
 
   const closeModal = () => { setShowModal(false); setForm(INITIAL_FORM); setPayChequeIds([]); };
 
@@ -336,14 +340,15 @@ export function Finance() {
       if (!form.usdAmount || form.usdAmount <= 0) { notify('Poné cuántos dólares usaste.', 'error'); return; }
       if (form.usdAmount > usdHoldings + 0.0001) { notify(`No te alcanza: solo tenés ${fmtUSD(usdHoldings)} en tenencia.`, 'error'); return; }
       if (usdAvgCost <= 0) { notify('No tenés dólares cargados para pagar con dólares.', 'error'); return; }
+      if (!form.usdRate || form.usdRate <= 0) { notify('Poné a qué precio usaste los dólares ($ por U$S).', 'error'); return; }
       addExpenseWithPayment(
         {
           type: 'egreso', category: form.category, amount: usdExpensePesos,
           description: form.description, date: form.date, paid: true,
-          paymentMethod: 'dolares', payee, usdAmount: form.usdAmount, usdRate: usdAvgCost,
+          paymentMethod: 'dolares', payee, usdAmount: form.usdAmount, usdRate: form.usdRate,
           vehicleId: undefined, clientId: undefined, supplierId: undefined,
         },
-        { usd: { amountUsd: form.usdAmount, rate: usdAvgCost } },
+        { usd: { amountUsd: form.usdAmount, rate: form.usdRate } },
       );
       closeModal();
       return;
@@ -636,7 +641,7 @@ export function Finance() {
             {(['ingreso', 'egreso'] as const).map((t) => (
               <button
                 key={t}
-                onClick={() => { setForm((f) => ({ ...f, type: t, category: t === 'ingreso' ? 'venta_contado' : 'compra_vehiculo', paid: t === 'ingreso', method: 'efectivo', usdAmount: 0 })); setPayChequeIds([]); }}
+                onClick={() => { setForm((f) => ({ ...f, type: t, category: t === 'ingreso' ? 'venta_contado' : 'compra_vehiculo', paid: t === 'ingreso', method: 'efectivo', usdAmount: 0, usdRate: 0 })); setPayChequeIds([]); }}
                 className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors border-2 ${
                   form.type === t
                     ? t === 'ingreso' ? 'bg-green-50 border-green-400 text-green-800' : 'bg-red-50 border-red-400 text-red-800'
@@ -677,19 +682,44 @@ export function Finance() {
             </div>
           )}
 
-          {/* Monto (efectivo/cheque) o Dólares usados */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {form.type === 'egreso' && form.method === 'dolares' ? (
-              <div>
+          {/* Dólares usados + cotización a la que los usé */}
+          {form.type === 'egreso' && form.method === 'dolares' && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-4">
                 <Input
-                  label="Dólares usados (U$S)" type="number" value={form.usdAmount}
+                  label="Dólares usados (U$S)" type="number" value={form.usdAmount || ''}
                   onChange={(e) => setForm((f) => ({ ...f, usdAmount: +e.target.value }))}
                 />
-                <p className="text-[11px] text-slate-500 mt-1">
-                  = <b>{formatCurrency(usdExpensePesos)}</b> al promedio ({fmtUSD(usdHoldings)} disponibles)
-                </p>
+                <Input
+                  label="Cotización ($ por U$S)" type="number" value={form.usdRate || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, usdRate: +e.target.value }))}
+                  placeholder={usdAvgCost ? String(Math.round(usdAvgCost)) : '1500'}
+                />
               </div>
-            ) : (
+              {usdAvgCost > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, usdRate: Math.round(usdAvgCost * 100) / 100 }))}
+                  className="text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  Usar mi promedio: <b>{formatCurrency(usdAvgCost)}</b>
+                </button>
+              )}
+              <p className="text-[11px] text-slate-500">
+                {fmtUSD(usdHoldings)} disponibles
+                {usdExpensePesos > 0 && <> · gasto = <b>{formatCurrency(usdExpensePesos)}</b></>}
+                {usdExpensePesos > 0 && Math.abs(usdExpenseDiff) >= 1 && (
+                  <span className={usdExpenseDiff >= 0 ? 'text-brand-700' : 'text-red-700'}>
+                    {' '}· {usdExpenseDiff >= 0 ? 'ganancia' : 'pérdida'} en dólares {formatCurrency(Math.abs(usdExpenseDiff))} (vs. promedio {formatCurrency(usdAvgCost)})
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
+
+          {/* Monto (efectivo/cheque) + fecha */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {form.type === 'egreso' && form.method === 'dolares' ? null : (
               <Input
                 label="Monto ($)" type="number" value={form.amount}
                 onChange={(e) => setForm((f) => ({ ...f, amount: +e.target.value }))}
