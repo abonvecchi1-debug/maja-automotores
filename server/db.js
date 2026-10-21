@@ -466,6 +466,20 @@ try { db.exec(`ALTER TABLE sync_deletions ADD COLUMN server_deleted_at TEXT`); }
 // Aditivo y retrocompatible: si falta `rev` (cliente/Render viejo) se cae al LWW anterior.
 for (const t of SYNCABLE_TABLES) {
   try { db.exec(`ALTER TABLE ${t} ADD COLUMN rev INTEGER NOT NULL DEFAULT 0`); } catch {}
+  // Re-creamos el trigger de update ahora que existe `rev`: si cambió el rev, el UPDATE
+  // viene del sync (aplicar lo que bajó de la nube), NO es una edición local → no tocar
+  // updated_at. Antes el eco de nuestro propio push volvía con el mismo updated_at, el
+  // trigger lo "renovaba", se re-subía y la nube le sumaba otro rev: loop infinito que
+  // inflaba los rev y pisaba ediciones de otras PCs.
+  db.exec(`DROP TRIGGER IF EXISTS trg_${t}_update`);
+  db.exec(`
+    CREATE TRIGGER trg_${t}_update
+    AFTER UPDATE ON ${t}
+    WHEN (OLD.updated_at = NEW.updated_at OR NEW.updated_at IS NULL) AND NEW.rev IS OLD.rev
+    BEGIN
+      UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = NEW.id;
+    END;
+  `);
 }
 try { db.exec(`UPDATE sync_deletions SET server_deleted_at = deleted_at WHERE server_deleted_at IS NULL`); } catch {}
 
