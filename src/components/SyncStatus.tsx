@@ -10,7 +10,8 @@ interface SyncState {
   error: string | null;
 }
 
-export function SyncStatus() {
+/** Estado de sincronización en una línea. Si no hay sync configurada muestra `fallback`. */
+export function SyncStatus({ fallback }: { fallback?: string }) {
   const [state, setState] = useState<SyncState | null>(null);
   const lastSyncRef = useRef<string | null>(null);
   const loadAll = useStore((s) => s.loadAll);
@@ -27,7 +28,7 @@ export function SyncStatus() {
         setState(data);
         // When lastSync changes it means new data arrived — reload the store
         if (data.lastSync && data.lastSync !== lastSyncRef.current) {
-          if (lastSyncRef.current !== null) loadAll();
+          if (lastSyncRef.current !== null) loadAll(true);
           lastSyncRef.current = data.lastSync;
         }
       } catch {}
@@ -37,20 +38,20 @@ export function SyncStatus() {
     return () => clearInterval(id);
   }, [loadAll]);
 
-  if (!state?.configured) return null;
+  if (!state?.configured) {
+    return fallback ? <p className="text-[13px] text-slate-500 truncate">{fallback}</p> : null;
+  }
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2">
+    <p className="flex items-center gap-1.5 text-[13px] text-slate-500">
       {state.syncing ? (
-        <RefreshCw size={12} className="text-blue-400 animate-spin flex-shrink-0" />
+        <RefreshCw size={12} className="text-brand-600 animate-spin flex-shrink-0" />
       ) : state.online ? (
-        <Cloud size={12} className="text-green-400 flex-shrink-0" />
+        <Cloud size={12} className="text-[#34c759] flex-shrink-0" />
       ) : (
-        <CloudOff size={12} className="text-red-400 flex-shrink-0" />
+        <CloudOff size={12} className="text-[#ff3b30] flex-shrink-0" />
       )}
-      <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
-        {state.syncing ? 'Sincronizando...' : state.online ? 'Online' : 'Offline'}
-      </span>
-    </div>
+      {state.syncing ? 'Sincronizando…' : state.online ? 'Sincronizado' : 'Sin conexión'}
+    </p>
   );
 }

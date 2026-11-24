@@ -5,7 +5,7 @@ import { useStore } from '../store';
 import { notify } from './ui/Feedback';
 
 export function BirthdayBanner() {
-  const { clients } = useStore();
+  const clients = useStore((s) => s.clients);
   const navigate = useNavigate();
   const [dismissed, setDismissed] = useState(false);
 
@@ -30,15 +30,17 @@ export function BirthdayBanner() {
   if (dismissed || birthdayClients.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 border-b border-amber-200 bg-amber-50 flex-shrink-0">
-      <Cake size={15} className="text-amber-600 flex-shrink-0" />
-      <p className="flex-1 text-sm text-amber-800">
+    <div className="glass flex items-center gap-3 mx-3 md:mx-5 mt-3 px-4 py-2.5 rounded-2xl flex-shrink-0">
+      <span className="w-8 h-8 rounded-[10px] bg-[#ff2d55] text-white flex items-center justify-center flex-shrink-0">
+        <Cake size={16} />
+      </span>
+      <p className="flex-1 text-sm text-slate-800">
         {birthdayClients.length === 1 ? (
           <>
             Hoy es el cumpleaños de{' '}
             <button
               onClick={() => navigate(`/clientes/${birthdayClients[0].id}`)}
-              className="font-semibold underline hover:text-amber-900"
+              className="font-semibold text-brand-600 hover:underline"
             >
               {birthdayClients[0].firstName} {birthdayClients[0].lastName}
             </button>
@@ -52,7 +54,7 @@ export function BirthdayBanner() {
                 {i > 0 && ', '}
                 <button
                   onClick={() => navigate(`/clientes/${c.id}`)}
-                  className="font-semibold underline hover:text-amber-900"
+                  className="font-semibold text-brand-600 hover:underline"
                 >
                   {c.firstName} {c.lastName}
                 </button>
@@ -64,8 +66,8 @@ export function BirthdayBanner() {
       </p>
       <button
         onClick={() => setDismissed(true)}
-        className="text-amber-500 hover:text-amber-700 flex-shrink-0 transition-colors"
-        title="Cerrar"
+        aria-label="Cerrar aviso"
+        className="w-7 h-7 rounded-full flex items-center justify-center text-slate-500 hover:bg-white/70 flex-shrink-0 transition-colors"
       >
         <X size={15} />
       </button>

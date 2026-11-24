@@ -4,6 +4,7 @@ import { AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { GlassBackdrop } from '../components/Layout';
 
 const BRAND_NAVY = '#262e63';
 
@@ -33,44 +34,37 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-100">
-      {/* Top brand header */}
-      <div
-        className="w-full px-8 py-5 flex items-center justify-center flex-shrink-0"
-        style={{ backgroundColor: BRAND_NAVY }}
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 384.2 79.64"
-          fill="white"
-          className="h-10 w-auto"
+    <div className="relative min-h-screen flex flex-col bg-[#eceef7]">
+      <GlassBackdrop />
+      {/* Logo */}
+      <div className="relative w-full px-8 pt-14 pb-2 flex items-center justify-center flex-shrink-0">
+        {/* Logo oficial (PNG con la bajada en la tipografía de la marca) usado como
+            silueta y pintado en azul Maja, para que se vea sobre el fondo claro. */}
+        <div
+          role="img"
           aria-label="Maja Automotores"
-        >
-          <polygon points="240.46 0 240.46 52.83 223.88 52.83 223.88 13.55 181.77 52.83 162.35 52.83 219.03 0 240.46 0" />
-          <polygon points="152.92 0 152.92 52.83 136.34 52.83 136.34 13.55 94.22 52.83 78.05 52.83 78.05 13.55 35.94 52.83 16.96 52.83 0 35.92 9.54 27.11 27.13 43.35 73.64 0 94.63 0 94.63 34.83 131.99 0 152.92 0" />
-          <polygon points="323.73 0 342.76 0 286.06 52.83 267.12 52.83 250.12 35.92 259.66 27.11 277.24 43.35 323.73 0" />
-          <polygon points="384.2 0 384.2 52.83 367.62 52.83 367.62 13.55 325.51 52.83 306.09 52.83 362.77 0 384.2 0" />
-          <text
-            transform="translate(75.35 79.02)"
-            fontSize="11.94"
-            fontFamily="Inter, system-ui, sans-serif"
-            fontWeight="600"
-            letterSpacing="2.4"
-            fill="white"
-            opacity="0.65"
-          >
-            AUTOMOTORES
-          </text>
-        </svg>
+          className="h-14 aspect-[385/80]"
+          style={{
+            backgroundColor: BRAND_NAVY,
+            WebkitMaskImage: 'url(/maja-logo-blanco.png)',
+            maskImage: 'url(/maja-logo-blanco.png)',
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskPosition: 'center',
+            maskPosition: 'center',
+          }}
+        />
       </div>
 
       {/* Login card */}
-      <div className="flex-1 flex items-center justify-center p-6">
+      <div className="relative flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-sm">
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+          <div className="glass rounded-[28px] p-8">
             <div className="mb-6 text-center">
-              <h1 className="text-xl font-semibold text-slate-900">Iniciar sesión</h1>
-              <p className="text-sm text-slate-500 mt-1">Ingresá con tu cuenta de acceso</p>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Iniciar sesión</h1>
+              <p className="text-sm text-slate-600 mt-1">Ingresá con tu cuenta de acceso</p>
             </div>
 
             <form onSubmit={handleSubmit} noValidate className="space-y-4">
@@ -96,7 +90,7 @@ export function Login() {
               />
 
               {error && (
-                <div className="flex items-start gap-2.5 rounded-lg bg-red-50 border border-red-100 px-3.5 py-3 text-sm text-red-700">
+                <div className="flex items-start gap-2.5 rounded-xl bg-[#ff3b30]/10 px-3.5 py-3 text-sm text-[#c2000f]">
                   <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
                   <span>{error}</span>
                 </div>
@@ -114,7 +108,7 @@ export function Login() {
             </form>
           </div>
 
-          <p className="text-center text-xs text-slate-400 mt-5">
+          <p className="text-center text-xs text-slate-600 mt-5">
             Sistema de gestión interno · Maja Automotores
           </p>
         </div>

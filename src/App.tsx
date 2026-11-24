@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -7,27 +7,33 @@ import { useStore } from './store';
 import { FeedbackHost } from './components/ui/Feedback';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
-import { Vehicles } from './pages/Vehicles';
-import { VehicleDetail } from './pages/VehicleDetail';
-import { Clients } from './pages/Clients';
-import { ClientDetail } from './pages/ClientDetail';
-import { Suppliers } from './pages/Suppliers';
-import { SupplierDetail } from './pages/SupplierDetail';
-import { Finance } from './pages/Finance';
-import { FixedExpenses } from './pages/FixedExpenses';
-import { Tasks } from './pages/Tasks';
-import { Taxes } from './pages/Taxes';
-import { Users } from './pages/Users';
-import { Transfers } from './pages/Transfers';
-import { Leads } from './pages/Leads';
-import { Credits } from './pages/Credits';
-import { Reports } from './pages/Reports';
-import { Cheques } from './pages/Cheques';
-import { Dollars } from './pages/Dollars';
-import { CapitalAssets } from './pages/CapitalAssets';
-import { Quotes } from './pages/Quotes';
-import { Appraisals } from './pages/Appraisals';
-import { SyncSettings } from './pages/SyncSettings';
+
+// El resto de las pantallas se cargan recién cuando se abren (la app arranca más
+// liviana: PDF, Excel y gráficos no se bajan hasta que hacen falta).
+const page = <K extends string>(load: () => Promise<Record<K, React.ComponentType>>, name: K) =>
+  lazy(() => load().then((m) => ({ default: m[name] })));
+
+const Vehicles       = page(() => import('./pages/Vehicles'), 'Vehicles');
+const VehicleDetail  = page(() => import('./pages/VehicleDetail'), 'VehicleDetail');
+const Clients        = page(() => import('./pages/Clients'), 'Clients');
+const ClientDetail   = page(() => import('./pages/ClientDetail'), 'ClientDetail');
+const Suppliers      = page(() => import('./pages/Suppliers'), 'Suppliers');
+const SupplierDetail = page(() => import('./pages/SupplierDetail'), 'SupplierDetail');
+const Finance        = page(() => import('./pages/Finance'), 'Finance');
+const FixedExpenses  = page(() => import('./pages/FixedExpenses'), 'FixedExpenses');
+const Tasks          = page(() => import('./pages/Tasks'), 'Tasks');
+const Taxes          = page(() => import('./pages/Taxes'), 'Taxes');
+const Users          = page(() => import('./pages/Users'), 'Users');
+const Transfers      = page(() => import('./pages/Transfers'), 'Transfers');
+const Leads          = page(() => import('./pages/Leads'), 'Leads');
+const Credits        = page(() => import('./pages/Credits'), 'Credits');
+const Reports        = page(() => import('./pages/Reports'), 'Reports');
+const Cheques        = page(() => import('./pages/Cheques'), 'Cheques');
+const Dollars        = page(() => import('./pages/Dollars'), 'Dollars');
+const CapitalAssets  = page(() => import('./pages/CapitalAssets'), 'CapitalAssets');
+const Quotes         = page(() => import('./pages/Quotes'), 'Quotes');
+const Appraisals     = page(() => import('./pages/Appraisals'), 'Appraisals');
+const SyncSettings   = page(() => import('./pages/SyncSettings'), 'SyncSettings');
 
 /** Runs checkAuth on mount and loads all app data once authenticated. */
 function AuthInitializer({ children }: { children: React.ReactNode }) {
@@ -47,6 +53,7 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
   // dispara una sincronización con la nube (throttle 15s) para bajar lo último al
   // instante al volver a la ventana → la otra PC deja de quedar atrasada.
   const lastCloudSync = useRef(0);
+  const lastRefresh = useRef(0);
   useEffect(() => {
     if (!isAuthenticated) return;
     const refresh = () => {
@@ -54,13 +61,18 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
       // (el Modal pone overflow:hidden en el body), para no mover nada mientras cargás algo.
       if (!(document.visibilityState === 'visible' && document.body.style.overflow !== 'hidden')) return;
       const now = Date.now();
+      // Al volver a la ventana llegan "focus" y "visibilitychange" juntos: uno solo alcanza.
+      if (now - lastRefresh.current < 3_000) return;
+      lastRefresh.current = now;
       if (now - lastCloudSync.current > 15_000) {
         lastCloudSync.current = now;
-        // Pide al server local que sincronice con la nube y, cuando termina, relee.
+        // Pide al server local que sincronice con la nube y relee recién cuando termina
+        // (releer antes traía los mismos datos dos veces seguidas).
         fetch('/api/sync/now', {
           method: 'POST',
           headers: { Authorization: `Bearer ${localStorage.getItem('maja-auth-token')}` },
-        }).then(() => loadAll(true)).catch(() => {});
+        }).finally(() => loadAll(true)).catch(() => {});
+        return;
       }
       loadAll(true);
     };

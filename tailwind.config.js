@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Montserrat', '-apple-system', 'Segoe UI', 'system-ui', 'sans-serif'],
       },
       colors: {
         brand: {

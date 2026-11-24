@@ -22,6 +22,12 @@ export const formatCurrencyShort = (amount: number): string => {
   return formatCurrency(amount);
 };
 
+/** Eje de gráficos cuyos valores vienen en miles de pesos: 18000 → "$18M", 750 → "$750K". */
+export const formatAxisThousands = (v: number): string =>
+  Math.abs(v) >= 1000
+    ? `$${(v / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M`
+    : `$${v}K`;
+
 // ─── Dates ────────────────────────────────────────────────────────────────
 
 export const formatDate = (dateStr: string | undefined): string => {

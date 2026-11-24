@@ -65,9 +65,9 @@ export function FeedbackHost() {
   const { toasts, remove } = useToastStore();
 
   const toastColor: Record<ToastType, string> = {
-    info: 'bg-slate-800 text-white',
-    error: 'bg-red-600 text-white',
-    success: 'bg-green-600 text-white',
+    info: 'bg-slate-900/85 text-white',
+    error: 'bg-[#ff3b30]/95 text-white',
+    success: 'bg-[#1f9d4a]/95 text-white',
   };
 
   return (
@@ -91,7 +91,7 @@ export function FeedbackHost() {
           <button
             key={t.id}
             onClick={() => remove(t.id)}
-            className={`text-left text-sm px-4 py-3 rounded-xl shadow-lg ${toastColor[t.type]} animate-in`}
+            className={`text-left text-sm font-medium px-4 py-3 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl ${toastColor[t.type]} animate-in`}
           >
             {t.message}
           </button>

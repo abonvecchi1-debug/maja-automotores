@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, TrendingUp, TrendingDown, DollarSign, Trash2, Car, CheckCircle, Clock, Wallet, FileText } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts';
 import { useStore } from '../store';
 import { LIQUID_METHODS } from '../types';
 import { Button } from '../components/ui/Button';
@@ -10,7 +10,7 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { confirmDialog, notify } from '../components/ui/Feedback';
-import { formatCurrency, formatDate, getCurrentMonth, formatMonthLabel } from '../utils/formatters';
+import { formatCurrency, formatDate, getCurrentMonth, formatMonthLabel, formatAxisThousands } from '../utils/formatters';
 import { usdRealizedProfits, saleProfitEvents } from '../utils/finance';
 
 const INCOME_CATEGORIES = [
@@ -509,19 +509,21 @@ export function Finance() {
 
       {/* Chart */}
       <Card>
-        <h3 className="text-base font-semibold text-slate-900 mb-4">Ingresos vs Egresos (últimos 6 meses, en miles)</h3>
-        <div className="h-48">
+        <h3 className="text-xl font-bold tracking-tight text-slate-900 mb-4">Ingresos vs. egresos <span className="text-sm font-medium text-slate-600">· últimos 6 meses</span></h3>
+        <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-              <XAxis dataKey="mes" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}K`} />
+            <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barGap={5} barCategoryGap="28%">
+              <CartesianGrid vertical={false} stroke="rgba(38,46,99,0.08)" />
+              <XAxis dataKey="mes" tick={{ fontSize: 13, fill: '#4a4a55' }} axisLine={false} tickLine={false} />
+              <YAxis width={56} tick={{ fontSize: 12, fill: '#4a4a55' }} axisLine={false} tickLine={false} tickFormatter={formatAxisThousands} />
               <Tooltip
-                formatter={(v: number) => [`$${v.toLocaleString('es-AR')}K`]}
-                contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '13px' }}
+                cursor={{ fill: 'rgba(38,46,99,0.05)', radius: 10 }}
+                formatter={(v: number, name: string) => [formatCurrency(v * 1000), name]}
+                contentStyle={{ borderRadius: '14px', border: '1px solid rgba(255,255,255,0.8)', background: 'rgba(255,255,255,0.9)', boxShadow: '0 8px 30px rgba(38,46,99,0.15)', fontSize: '13px' }}
               />
-              <Legend wrapperStyle={{ fontSize: '12px' }} />
-              <Bar dataKey="Ingresos" fill="#22c55e" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Egresos" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              <Legend iconType="circle" wrapperStyle={{ fontSize: '13px', paddingTop: '6px' }} />
+              <Bar dataKey="Ingresos" fill="#262e63" radius={[8, 8, 4, 4]} maxBarSize={18} />
+              <Bar dataKey="Egresos" fill="#ff9500" radius={[8, 8, 4, 4]} maxBarSize={18} />
             </BarChart>
           </ResponsiveContainer>
         </div>

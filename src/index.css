@@ -8,34 +8,89 @@
 
 body {
   margin: 0;
-  font-family: 'Inter', system-ui, sans-serif;
-  background-color: #f1f5f9;
-  color: #1e293b;
+  font-family: 'Montserrat', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  background-color: #eceef7;
+  color: #1c1c1e;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+/* ── Vidrio (glassmorphism) ─────────────────────────────────────────────── */
+@layer components {
+  .glass {
+    background: rgba(255, 255, 255, 0.58);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow: 0 8px 32px rgba(38, 46, 99, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+  /* Más opaco: menús desplegables y paneles sobre el contenido. */
+  .glass-strong {
+    background: rgba(255, 255, 255, 0.86);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 12px 40px rgba(38, 46, 99, 0.14);
+  }
+  .glass-navy {
+    background: rgba(38, 46, 99, 0.84);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 10px 34px rgba(38, 46, 99, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    color: #fff;
+  }
 }
 
-/* Input focus ring */
+/* Tarjetas armadas a mano en las pantallas (bg-white + borde) → mismo vidrio,
+   así todo el sistema toma el estilo nuevo sin reescribir cada página. */
+main .bg-white.rounded-xl.border,
+main .bg-white.rounded-2xl.border,
+main .bg-white.rounded-lg.border.shadow-sm {
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border-color: rgba(255, 255, 255, 0.75);
+  border-radius: 22px;
+  box-shadow: 0 8px 32px rgba(38, 46, 99, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+/* Tablas: encabezados y filas sobre vidrio */
+main table thead tr { background: transparent; }
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(38, 46, 99, 0.18);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(38, 46, 99, 0.32);
+  background-clip: padding-box;
+}
+
 input:focus, select:focus, textarea:focus {
   outline: none;
 }
 
-/* Transition default */
 * {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Si Windows tiene activado "reducir transparencia/animaciones", vidrio más opaco. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass, main .bg-white.rounded-xl.border, main .bg-white.rounded-2xl.border {
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }

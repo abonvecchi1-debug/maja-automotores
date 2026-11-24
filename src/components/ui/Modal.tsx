@@ -37,28 +37,29 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', footer }:
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
       {/* Overlay */}
       <div
-        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-slate-900/35 backdrop-blur-md"
         onClick={onClose}
       />
       {/* Dialog — bottom sheet on mobile, centered on sm+ */}
       <div className={clsx(
-        'relative bg-white w-full flex flex-col',
-        'rounded-t-2xl sm:rounded-2xl shadow-2xl',
+        'relative w-full flex flex-col glass-strong',
+        'rounded-t-[28px] sm:rounded-[28px]',
         'max-h-[92vh] sm:max-h-[90vh]',
         sizeMap[size],
       )}>
         {/* Handle bar (mobile) */}
         <div className="sm:hidden flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 rounded-full bg-slate-200" />
+          <div className="w-10 h-1 rounded-full bg-slate-300" />
         </div>
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 sm:px-6 border-b border-slate-100">
-          <h2 className="text-base sm:text-lg font-semibold text-slate-900">{title}</h2>
+        <div className="flex items-center justify-between px-5 py-4 sm:px-6 border-b border-slate-900/[0.06]">
+          <h2 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900">{title}</h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            aria-label="Cerrar"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 bg-slate-900/[0.06] hover:bg-slate-900/10 hover:text-slate-800 transition-colors"
           >
-            <X size={18} />
+            <X size={16} strokeWidth={2.4} />
           </button>
         </div>
         {/* Body */}
@@ -67,7 +68,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', footer }:
         </div>
         {/* Footer */}
         {footer && (
-          <div className="px-5 py-4 sm:px-6 border-t border-slate-100 flex justify-end gap-3">
+          <div className="px-5 py-4 sm:px-6 border-t border-slate-900/[0.06] flex justify-end gap-3">
             {footer}
           </div>
         )}

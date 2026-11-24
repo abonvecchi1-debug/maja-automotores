@@ -1,5 +1,6 @@
 import { clsx } from 'clsx';
 import type { SelectHTMLAttributes } from 'react';
+import { fieldClass } from './Input';
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
@@ -11,9 +12,9 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 export function Select({ label, error, options, placeholder, className, id, ...props }: SelectProps) {
   const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5">
       {label && (
-        <label htmlFor={inputId} className="text-sm font-medium text-slate-700">
+        <label htmlFor={inputId} className="text-[13px] font-semibold text-slate-700">
           {label}
         </label>
       )}
@@ -21,10 +22,9 @@ export function Select({ label, error, options, placeholder, className, id, ...p
         id={inputId}
         {...props}
         className={clsx(
-          'w-full px-3 py-2 text-sm border rounded-lg bg-white text-slate-900',
-          'focus:ring-2 focus:ring-brand-600 focus:border-brand-600 transition-colors duration-150',
-          error ? 'border-red-400' : 'border-slate-300',
-          'disabled:bg-slate-50',
+          fieldClass,
+          error ? 'border-red-400' : 'border-slate-300/70',
+          'disabled:bg-slate-100/60',
           className,
         )}
       >

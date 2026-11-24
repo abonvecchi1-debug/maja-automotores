@@ -8,17 +8,17 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantMap = {
-  primary: 'bg-brand-600 hover:bg-brand-700 text-white shadow-sm',
-  secondary: 'bg-slate-100 hover:bg-slate-200 text-slate-700',
-  danger: 'bg-red-600 hover:bg-red-700 text-white',
-  ghost: 'hover:bg-slate-100 text-slate-600',
-  outline: 'border border-slate-300 hover:bg-slate-50 text-slate-700',
+  primary: 'bg-brand-600 hover:bg-brand-700 text-white shadow-[0_6px_18px_rgba(38,46,99,0.28)]',
+  secondary: 'bg-white/60 hover:bg-white/85 text-slate-900 border border-white/80 backdrop-blur-md',
+  danger: 'bg-[#ff3b30] hover:bg-[#e0352b] text-white shadow-[0_6px_18px_rgba(255,59,48,0.25)]',
+  ghost: 'hover:bg-white/60 text-slate-700',
+  outline: 'bg-white/50 hover:bg-white/85 border border-slate-300/70 text-slate-900 backdrop-blur-md',
 };
 
 const sizeMap = {
-  sm: 'px-3 py-1.5 text-xs gap-1.5',
-  md: 'px-4 py-2 text-sm gap-2',
-  lg: 'px-5 py-2.5 text-base gap-2',
+  sm: 'px-3.5 py-1.5 text-xs gap-1.5',
+  md: 'px-[18px] py-2.5 text-sm gap-2',
+  lg: 'px-6 py-3 text-base gap-2',
 };
 
 export function Button({
@@ -30,8 +30,9 @@ export function Button({
       {...props}
       disabled={disabled || loading}
       className={clsx(
-        'inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-150',
-        'disabled:opacity-50 disabled:cursor-not-allowed',
+        'inline-flex items-center justify-center font-semibold rounded-full transition-all duration-150 active:scale-[0.98]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
+        'disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100',
         variantMap[variant],
         sizeMap[size],
         className,

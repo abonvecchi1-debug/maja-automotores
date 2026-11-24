@@ -9,7 +9,7 @@ interface CardProps {
 export function Card({ children, className, padding = true }: CardProps) {
   return (
     <div className={clsx(
-      'bg-white rounded-xl shadow-sm border border-slate-200',
+      'glass rounded-[24px]',
       padding && 'p-6',
       className,
     )}>
@@ -27,34 +27,43 @@ interface StatCardProps {
   trend?: { value: number; label: string };
 }
 
+// Cuadradito del ícono en color liso (estilo iOS) y el número en un tono legible.
 const colorMap = {
-  blue:   { bg: 'bg-brand-50',   icon: 'bg-brand-100 text-brand-600',   text: 'text-brand-600' },
-  green:  { bg: 'bg-green-50',   icon: 'bg-green-100 text-green-600',   text: 'text-green-600' },
-  amber:  { bg: 'bg-amber-50',   icon: 'bg-amber-100 text-amber-600',   text: 'text-amber-600' },
-  red:    { bg: 'bg-red-50',     icon: 'bg-red-100 text-red-600',       text: 'text-red-600' },
-  purple: { bg: 'bg-purple-50',  icon: 'bg-purple-100 text-purple-600', text: 'text-purple-600' },
-  slate:  { bg: 'bg-slate-50',   icon: 'bg-slate-100 text-slate-600',   text: 'text-slate-600' },
+  blue:   { tile: 'bg-brand-600',  text: 'text-slate-900' },
+  green:  { tile: 'bg-[#34c759]',  text: 'text-[#1a6e34]' },
+  amber:  { tile: 'bg-[#ff9500]',  text: 'text-[#7a4200]' },
+  red:    { tile: 'bg-[#ff3b30]',  text: 'text-[#c2000f]' },
+  purple: { tile: 'bg-[#af52de]',  text: 'text-[#7a2a9e]' },
+  slate:  { tile: 'bg-slate-500',  text: 'text-slate-900' },
 };
 
 export function StatCard({ title, value, subtitle, icon, color = 'blue', trend }: StatCardProps) {
   const c = colorMap[color];
   return (
-    <Card className={clsx('flex items-start gap-4', c.bg)}>
-      {icon && (
-        <div className={clsx('p-3 rounded-xl flex-shrink-0', c.icon)}>
-          {icon}
-        </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-slate-500 font-medium truncate">{title}</p>
-        <p className={clsx('text-2xl font-bold mt-0.5', c.text)}>{value}</p>
-        {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
-        {trend && (
-          <p className={clsx('text-xs mt-1 font-medium', trend.value >= 0 ? 'text-green-600' : 'text-red-600')}>
-            {trend.value >= 0 ? '↑' : '↓'} {Math.abs(trend.value)}% {trend.label}
-          </p>
+    <Card className="flex flex-col gap-1 h-full">
+      <div className="flex items-center gap-2.5 min-w-0">
+        {icon && (
+          <span className={clsx(
+            'w-8 h-8 rounded-[10px] flex items-center justify-center flex-shrink-0 text-white [&>svg]:w-4 [&>svg]:h-4',
+            c.tile,
+          )}>
+            {icon}
+          </span>
         )}
+        <p className="text-sm font-semibold text-slate-600 truncate">{title}</p>
       </div>
+      <p className={clsx('text-[28px] font-bold tracking-tight mt-2 leading-tight', c.text)}>{value}</p>
+      {subtitle && <p className="text-[13px] text-slate-600 mt-0.5">{subtitle}</p>}
+      {trend && (
+        <p className="mt-1.5">
+          <span className={clsx(
+            'inline-block text-xs font-semibold rounded-full px-2.5 py-1',
+            trend.value >= 0 ? 'text-[#1a6e34] bg-[#34c759]/15' : 'text-[#c2000f] bg-[#ff3b30]/15',
+          )}>
+            {trend.value >= 0 ? '↑' : '↓'} {Math.abs(trend.value)}% {trend.label}
+          </span>
+        </p>
+      )}
     </Card>
   );
 }

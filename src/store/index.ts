@@ -136,6 +136,18 @@ function sync(call: () => Promise<void>, revert?: () => void) {
 // Anti-spam de la auto-reparación de vehículos vendidos (vehicleId → último intento ms).
 const reconcileAttempts = new Map<string, number>();
 
+// Último /api/data recibido y las listas que se cargaron con él. Si el refresco trae
+// exactamente lo mismo y nadie tocó nada en pantalla, no se actualiza el estado: así
+// las pantallas no se redibujan enteras cada minuto sin motivo.
+const DATA_KEYS = [
+  'vehicles', 'clients', 'sales', 'installmentPayments', 'suppliers', 'expenses',
+  'fixedExpenseTypes', 'fixedExpenseRecords', 'tasks', 'transactions', 'transfers', 'leads',
+  'dailyCashes', 'cashMovements', 'taxPayments', 'cheques', 'senas', 'usdOperations',
+  'capitalAssets', 'settings',
+] as const;
+let lastPayload: string | null = null;
+let lastLoaded: Partial<Record<(typeof DATA_KEYS)[number], unknown>> | null = null;
+
 // ─── Store ────────────────────────────────────────────────────────────────
 
 export const useStore = create<AppStore>((set, get) => ({
@@ -155,7 +167,19 @@ export const useStore = create<AppStore>((set, get) => ({
     try {
       const res = await authFetch('/api/data');
       if (!res.ok) throw new Error('Failed to load data');
-      const data = await res.json();
+      const text = await res.text();
+
+      // Nada cambió en el server y las listas en memoria son las mismas que cargamos
+      // la última vez (ningún alta/edición local desde entonces) → no tocar el estado.
+      const current = get();
+      const loaded = lastLoaded;
+      const untouched = loaded !== null && DATA_KEYS.every((k) => current[k] === loaded[k]);
+      if (current.initialized && text === lastPayload && untouched) {
+        if (!silent) set({ loading: false });
+        return;
+      }
+
+      const data = JSON.parse(text);
       set({
         vehicles: data.vehicles ?? [],
         clients: data.clients ?? [],
@@ -180,6 +204,9 @@ export const useStore = create<AppStore>((set, get) => ({
         initialized: true,
         loading: false,
       });
+      const after = get();
+      lastPayload = text;
+      lastLoaded = Object.fromEntries(DATA_KEYS.map((k) => [k, after[k]]));
 
       // Auto-reparación: si un auto tiene una venta registrada pero NO quedó marcado como
       // "vendido", lo marcamos vendido a partir de su venta. Pasa cuando el cambio de estado
